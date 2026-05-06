@@ -7,7 +7,7 @@
   "author": "Tien <chutien@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/vocweb/synology-mcp-server.git"
+    "url": "git+https://github.com/vocweb/synology-mcp-server.git"
   },
   "homepage": "https://github.com/vocweb/synology-mcp-server#readme",
   "bugs": {
@@ -31,7 +31,7 @@
     ".": "./dist/index.js"
   },
   "bin": {
-    "synology-mcp": "./dist/index.js"
+    "synology-mcp": "dist/index.js"
   },
   "files": [
     "dist",

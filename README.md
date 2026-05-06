@@ -215,11 +215,19 @@ Quick summary by module:
   "mcpServers": {
     "synology": {
       "command": "node",
-      "args": ["/absolute/path/to/synology-office-mcp/dist/index.js"],
+      "args": [
+        "<path_to_synology_mcp_server_source_code>/dist/index.js"
+      ],
       "env": {
         "SYNO_HOST": "192.168.1.100",
-        "SYNO_USERNAME": "your_user",
-        "SYNO_PASSWORD": "your_password"
+        "SYNO_USERNAME": "dsm_username",
+        "SYNO_PASSWORD": "dsm_password",
+        "SYNO_SS_HOST": "192.168.1.100",
+        "SYNO_SS_PORT": "3000",
+        "SYNO_SS_HTTPS": "false",
+        "SYNO_SS_DSM_HOST": "192.168.1.100",
+        "SYNO_SS_DSM_PORT": "5001",
+        "SYNO_SS_DSM_HTTPS": "false"
       }
     }
   }
@@ -232,6 +240,22 @@ See [`examples/claude-desktop-config.json`](./examples/claude-desktop-config.jso
 
 ```bash
 claude mcp add synology-office -- node /path/to/synology-office-mcp/dist/index.js
+
+claude mcp add --scope user synology \
+  -e SYNO_HOST=192.168.1.100 \
+  -e SYNO_PORT=5001 \
+  -e SYNO_HTTPS=true \
+  -e SYNO_IGNORE_CERT=true \
+  -e SYNO_USERNAME=dsm_username \
+  -e 'SYNO_PASSWORD=dsm_password' \
+  -e SYNO_SS_HOST=192.168.1.100 \
+  -e SYNO_SS_PORT=3000 \
+  -e SYNO_SS_HTTPS=false \
+  -e SYNO_SS_DSM_HOST=192.168.1.100 \
+  -e SYNO_SS_DSM_PORT=5000 \
+  -e SYNO_SS_DSM_HTTPS=false \
+  -- node <path_to_synology_mcp_server_source_code>/dist/index.js
+
 ```
 
 See [`examples/claude-code-add.sh`](./examples/claude-code-add.sh) for the full command with env vars.
