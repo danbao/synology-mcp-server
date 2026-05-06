@@ -10,6 +10,13 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ---
 
+## [0.4.7] - 2026-05-06
+
+### Changed
+- Update README documentation.
+
+---
+
 ## [0.4.6] - 2026-05-03
 
 ### Added
