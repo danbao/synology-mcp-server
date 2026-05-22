@@ -1,6 +1,6 @@
 /**
  * Synology Spreadsheet API JWT authentication manager.
- * OpenAPI 3.3.2 — POST /spreadsheets/authorize, POST /spreadsheets/authorize/token/revoke.
+ * OpenAPI 3.4.1 — POST /spreadsheets/authorize, POST /spreadsheets/authorize/token/revoke.
  * Separate from DSM session auth: the JWT is tied to a DSM session via the
  * `host` body field, but is issued/served by the synology/spreadsheet-api container.
  */

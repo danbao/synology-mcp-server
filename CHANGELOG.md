@@ -8,6 +8,22 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added — Spreadsheet API 3.4.1 endpoints
+- `spreadsheet_write_styles` MCP tool — bulk overwrite cell formats via dedicated `PUT /spreadsheets/{id}/styles` endpoint (offset-based; simpler than `batch_update` for style-only writes).
+- `spreadsheet_delete_file` MCP tool — permanently delete an ENTIRE spreadsheet file via `POST /spreadsheets/delete`. Auto-evicts the file from the local name cache. Requires `confirm=true`. Distinct from `spreadsheet_delete_sheet` (tab-level).
+
+### Changed
+- Comments + spec docs aligned with OpenAPI **3.4.1** (was 3.3.2). Synology Office package floor raised to **3.7.0** for the new endpoints.
+- Tool count: **37 → 39** (Spreadsheet module: 13 → 15).
+
+### Why
+Project shipped against OpenAPI 3.3.2 in v0.4.x. The `synology/spreadsheet-api:3.4.1` container (current `latest` tag) exposes 2 endpoints not yet covered. Closes the spec gap; no breaking changes to existing tools.
+
+### Verified
+- All existing 37 tools unchanged (no surface regressions).
+- `pnpm test` green (325 tests), `pnpm lint` & `pnpm typecheck` clean.
+- New endpoints covered by client unit tests + MSW handlers + tool-level tests (rectangular validation, cache eviction, error mapping for 403/404).
+
 ---
 
 ## [0.4.7] - 2026-05-06

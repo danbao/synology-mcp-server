@@ -113,3 +113,48 @@ describe('SpreadsheetClient.exportFile', () => {
     expect(result.file_name).toBe('Budget.xlsx');
   });
 });
+
+describe('SpreadsheetClient.writeStyles', () => {
+  it('returns success on PUT /styles', async () => {
+    const client = createTestSpreadsheetClient();
+    const result = await client.writeStyles({
+      file_id: 'sheet-001',
+      sheet_name: 'Sheet1',
+      start_row: 0,
+      start_col: 0,
+      styles: [[{ textFormat: { bold: true } }]],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('throws on 404 endpoint', async () => {
+    const client = createTestSpreadsheetClient();
+    await expect(
+      client.writeStyles({
+        file_id: 'not-found',
+        sheet_name: 'Sheet1',
+        start_row: 0,
+        start_col: 0,
+        styles: [[{ textFormat: { bold: true } }]],
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe('SpreadsheetClient.deleteSpreadsheet', () => {
+  it('echoes the deleted spreadsheetId', async () => {
+    const client = createTestSpreadsheetClient();
+    const result = await client.deleteSpreadsheet('sheet-001');
+    expect(result.spreadsheetId).toBe('sheet-001');
+  });
+
+  it('throws on 404', async () => {
+    const client = createTestSpreadsheetClient();
+    await expect(client.deleteSpreadsheet('not-found')).rejects.toThrow();
+  });
+
+  it('throws on 403 forbidden', async () => {
+    const client = createTestSpreadsheetClient();
+    await expect(client.deleteSpreadsheet('forbidden')).rejects.toThrow();
+  });
+});
