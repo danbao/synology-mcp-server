@@ -8,6 +8,10 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+---
+
+## [0.5.0] - 2026-05-22
+
 ### Added — Spreadsheet API 3.4.1 endpoints
 - `spreadsheet_write_styles` MCP tool — bulk overwrite cell formats via dedicated `PUT /spreadsheets/{id}/styles` endpoint (offset-based; simpler than `batch_update` for style-only writes).
 - `spreadsheet_delete_file` MCP tool — permanently delete an ENTIRE spreadsheet file via `POST /spreadsheets/delete`. Auto-evicts the file from the local name cache. Requires `confirm=true`. Distinct from `spreadsheet_delete_sheet` (tab-level).
