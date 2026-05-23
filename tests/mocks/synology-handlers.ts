@@ -374,7 +374,7 @@ function handlePost(request: Request): Response {
 }
 
 // ---------------------------------------------------------------------------
-// Spreadsheet REST handlers (OpenAPI 3.3.2 — synology/spreadsheet-api)
+// Spreadsheet REST handlers (OpenAPI 3.4.1 — synology/spreadsheet-api)
 // ---------------------------------------------------------------------------
 
 /** POST /spreadsheets/authorize */
@@ -589,6 +589,44 @@ const spreadsheetBatchUpdateHandler = http.post(
   () => HttpResponse.json({}),
 );
 
+/** PUT /spreadsheets/{id}/styles — OpenAPI 3.4.1 bulk style write. */
+const spreadsheetWriteStylesHandler = http.put(
+  'http://nas.local:3000/spreadsheets/:id/styles',
+  async ({ params, request }) => {
+    if (params.id === 'not-found') {
+      return HttpResponse.json({ error: 'Endpoint not found' }, { status: 404 });
+    }
+    const body = (await request.json()) as {
+      sheetName?: string;
+      startRow?: number;
+      startCol?: number;
+      rows?: unknown[];
+    };
+    if (!body.sheetName || !Array.isArray(body.rows)) {
+      return HttpResponse.json({ error: 'Invalid argument' }, { status: 400 });
+    }
+    return HttpResponse.json({});
+  },
+);
+
+/** POST /spreadsheets/delete — OpenAPI 3.4.1 file-level delete. */
+const spreadsheetDeleteFileHandler = http.post(
+  'http://nas.local:3000/spreadsheets/delete',
+  async ({ request }) => {
+    const body = (await request.json()) as { spreadsheetId?: string };
+    if (!body.spreadsheetId) {
+      return HttpResponse.json({ error: 'Invalid argument' }, { status: 400 });
+    }
+    if (body.spreadsheetId === 'not-found') {
+      return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    if (body.spreadsheetId === 'forbidden') {
+      return HttpResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    return HttpResponse.json({ spreadsheetId: body.spreadsheetId });
+  },
+);
+
 /** All Spreadsheet REST handlers. */
 const spreadsheetHandlers = [
   spreadsheetAuthHandler,
@@ -605,6 +643,8 @@ const spreadsheetHandlers = [
   spreadsheetRenameSheetHandler,
   spreadsheetDeleteSheetHandler,
   spreadsheetBatchUpdateHandler,
+  spreadsheetWriteStylesHandler,
+  spreadsheetDeleteFileHandler,
 ];
 
 // ---------------------------------------------------------------------------

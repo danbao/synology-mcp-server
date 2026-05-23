@@ -74,6 +74,10 @@ Sample natural-language prompts for invoking each **synology-office-mcp** tool f
 ### `spreadsheet_get_styles`
 - "Get the cell styling for range `A1:F1` on sheet `Summary` of `Q1-Budget` — fonts, colors, alignment, number formats."
 
+### `spreadsheet_write_styles`
+- "Make the header row (A1:C1) of sheet `Summary` in `Q1-Budget` bold with a yellow background."
+- "Bulk-apply red bold to cells from row 0 col 0 spanning 2 rows × 3 cols on sheet `Forecast`."
+
 ### `spreadsheet_write_cells` *(confirm)*
 - "Write the values `[['Name','Total'],['Alice',1200]]` into `A1:B2` of sheet `Summary` in `Q1-Budget`."
 
@@ -92,6 +96,9 @@ Sample natural-language prompts for invoking each **synology-office-mcp** tool f
 
 ### `spreadsheet_delete_sheet` *(confirm)*
 - "Delete the sheet with id `7` from `Q1-Budget` — I know it cannot be undone."
+
+### `spreadsheet_delete_file` *(confirm)*
+- "Permanently delete the entire spreadsheet `Old Q3 Draft` — yes, confirm." *(removes the .osheet file and evicts it from the local name cache; distinct from `spreadsheet_delete_sheet` which removes only one tab.)*
 
 ### `spreadsheet_create`
 - "Create a blank spreadsheet at `/mydrive/Reports/2026-Q2-budget.osheet`."

@@ -153,8 +153,8 @@ export interface SynoCalEvent {
 
 // ============================================================================
 // Synology Spreadsheet API REST Types
-// Matches OpenAPI 3.3.2 (Synology Office package >= 3.6.0;
-// Docker tag synology/spreadsheet-api:3.4.1+ requires Synology Office >= 3.7.0).
+// Matches OpenAPI 3.4.1 (Synology Office package >= 3.7.0;
+// Docker tag synology/spreadsheet-api:3.4.1).
 // ============================================================================
 
 /** Cell value: literal or rich-text segment object. */

@@ -2,8 +2,8 @@
  * Synology Spreadsheet REST API client.
  *
  * Wraps the Synology Office Suite Spreadsheet API documented at
- * https://office-suite-api.synology.com/Synology-Spreadsheet/v3-3-2
- * (OpenAPI 3.3.2; requires Synology Office package >= 3.6.0; the matching
+ * https://office-suite-api.synology.com/Synology-Spreadsheet/v3-4-1
+ * (OpenAPI 3.4.1; requires Synology Office package >= 3.7.0; the matching
  * synology/spreadsheet-api Docker container default port is 3000).
  *
  * The MCP tool surface stays flat/internal (SynoSpreadsheetInfo/SynoCellData);
@@ -28,6 +28,7 @@ import type {
   CreateSpreadsheetResponse,
   GetStyleResponse,
   CellStyle,
+  CellFormat,
   CellJSON2D,
   BatchUpdateRequest,
   BatchUpdateRequestItem,
@@ -145,6 +146,21 @@ export interface BatchUpdateOpts {
 
 export interface BatchUpdateResult {
   success: boolean;
+}
+
+export interface WriteStylesOpts {
+  file_id: string;
+  sheet_name: string;
+  /** 0-based row offset. */
+  start_row: number;
+  /** 0-based column offset. */
+  start_col: number;
+  /** 2D grid of cell formats; styles[i][j] → cell (start_row+i, start_col+j). */
+  styles: CellFormat[][];
+}
+
+export interface DeleteSpreadsheetResult {
+  spreadsheetId: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +307,33 @@ export class SpreadsheetClient {
       { sheetId: opts.sheet_id },
     );
     return { success: true };
+  }
+
+  /** PUT /spreadsheets/{id}/styles — bulk overwrite cell formats (OpenAPI 3.4.1). */
+  async writeStyles(opts: WriteStylesOpts): Promise<{ success: true }> {
+    await this.fetchJson<unknown>(
+      'PUT',
+      `/spreadsheets/${encodeURIComponent(opts.file_id)}/styles`,
+      {
+        sheetName: opts.sheet_name,
+        startRow: opts.start_row,
+        startCol: opts.start_col,
+        rows: opts.styles.map((row) => ({
+          values: row.map((cell) => ({ userEnteredFormat: cell })),
+        })),
+      },
+    );
+    return { success: true };
+  }
+
+  /** POST /spreadsheets/delete — permanently delete an entire spreadsheet file. */
+  async deleteSpreadsheet(file_id: string): Promise<DeleteSpreadsheetResult> {
+    const response = await this.fetchJson<{ spreadsheetId: string }>(
+      'POST',
+      '/spreadsheets/delete',
+      { spreadsheetId: file_id },
+    );
+    return { spreadsheetId: response.spreadsheetId };
   }
 
   /** POST /spreadsheets/{id}/batchUpdate */

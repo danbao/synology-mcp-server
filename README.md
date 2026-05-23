@@ -67,7 +67,7 @@ Modules **not** included (no public API yet): Synology Docs, Synology Slides.
 | pnpm | `>= 9.0.0` (dev only) |
 | Synology DSM | `7.2.2 build 72806+` |
 | Synology Drive | `3.5.2+` |
-| Synology Office | `3.6.0+` (for Spreadsheet) |
+| Synology Office | `3.7.0+` (for Spreadsheet) |
 | Synology MailPlus | `3.3.1+` (requires MailPlus Server package) |
 | Synology Calendar | `2.5.3+` |
 
@@ -195,7 +195,7 @@ All configuration is via environment variables, validated by [Zod](https://zod.d
 
 ## Tool Reference
 
-Full table of all 37 tools with input schemas: [`tool-reference.md`](./tool-reference.md).
+Full table of all 39 tools with input schemas: [`tool-reference.md`](./tool-reference.md).
 
 Quick summary by module:
 
@@ -379,7 +379,7 @@ See [`examples/smoke-test.ts`](./examples/smoke-test.ts) for a standalone runnab
 
 | Document | Purpose |
 |---|---|
-| [tool-reference.md](./tool-reference.md) | All 37 tools: name, module, confirm-required, summary |
+| [tool-reference.md](./tool-reference.md) | All 39 tools: name, module, confirm-required, summary |
 | [usage-guide.md](./usage-guide.md) | Sample prompts for invoking each tool from an MCP-aware agent |
 | [deployment-guide.md](./deployment-guide.md) | Docker, systemd unit, Synology scheduled task |
 | [integration-guide.md](./integration-guide.md) | Client wiring (Claude, Cursor, Codex, LangChain, …) |

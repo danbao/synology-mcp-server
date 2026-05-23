@@ -4,7 +4,7 @@
  * synology/spreadsheet-api container.
  *
  * Prereqs:
- *   - Synology Office package >= 3.6.0 (REST API ships in 3.7+)
+ *   - Synology Office package >= 3.7.0 (matches OpenAPI 3.4.1)
  *   - synology/spreadsheet-api container running, reachable on SYNO_SS_HOST:SYNO_SS_PORT
  *   - DSM account with Office access
  *

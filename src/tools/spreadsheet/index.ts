@@ -16,6 +16,8 @@ import { spreadsheetRenameSheetTool } from './rename-sheet.js';
 import { spreadsheetDeleteSheetTool } from './delete-sheet.js';
 import { spreadsheetBatchUpdateTool } from './batch-update.js';
 import { spreadsheetRegisterTool } from './register.js';
+import { spreadsheetWriteStylesTool } from './write-styles.js';
+import { spreadsheetDeleteFileTool } from './delete.js';
 import type { ToolDefinition } from '../types.js';
 
 /** All Spreadsheet tool definitions, ready for MCP server registration. */
@@ -29,8 +31,10 @@ export const spreadsheetTools: ToolDefinition[] = [
   spreadsheetAddSheetTool,
   spreadsheetExportTool,
   spreadsheetGetStylesTool,
+  spreadsheetWriteStylesTool,
   spreadsheetRenameSheetTool,
   spreadsheetDeleteSheetTool,
+  spreadsheetDeleteFileTool,
   spreadsheetBatchUpdateTool,
   spreadsheetRegisterTool,
 ];

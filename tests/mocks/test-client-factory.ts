@@ -3,12 +3,16 @@
  * Provides a pre-configured client pointing at the MSW mock server base URL.
  */
 
+import path from 'node:path';
+import os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { DriveClient } from '../../src/clients/drive-client.js';
 import { SpreadsheetClient } from '../../src/clients/spreadsheet-client.js';
 import { MailPlusClient } from '../../src/clients/mailplus-client.js';
 import { CalendarClient } from '../../src/clients/calendar-client.js';
 import { AuthManager } from '../../src/auth/auth-manager.js';
 import { SpreadsheetAuthManager } from '../../src/auth/spreadsheet-auth-manager.js';
+import { SpreadsheetIdCache } from '../../src/cache/spreadsheet-id-cache.js';
 import type { SynologyConfig } from '../../src/types/index.js';
 import type { ToolContext } from '../../src/tools/types.js';
 
@@ -54,6 +58,12 @@ export function createTestCalendarClient(): CalendarClient {
   return new CalendarClient(TEST_CONFIG, authManager);
 }
 
+/** Create a SpreadsheetIdCache backed by a unique tmpfile so tests don't share state. */
+export function createTestSpreadsheetIdCache(): SpreadsheetIdCache {
+  const tmpPath = path.join(os.tmpdir(), `syno-mcp-cache-${randomUUID()}.json`);
+  return new SpreadsheetIdCache(tmpPath);
+}
+
 /** Create a ToolContext with test Drive, Spreadsheet, MailPlus, and Calendar clients. */
 export function createTestContext(): ToolContext {
   return {
@@ -61,5 +71,6 @@ export function createTestContext(): ToolContext {
     spreadsheetClient: createTestSpreadsheetClient(),
     mailplusClient: createTestMailPlusClient(),
     calendarClient: createTestCalendarClient(),
+    spreadsheetIdCache: createTestSpreadsheetIdCache(),
   };
 }
