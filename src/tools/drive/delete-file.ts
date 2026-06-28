@@ -11,7 +11,9 @@ const inputSchema = z.object({
   path: z.string().describe('File or folder path or ID to delete'),
   permanent: z
     .boolean()
-    .describe('If true, permanently delete. If false, move to Synology Drive trash.')
+    .describe(
+      'If true, attempt permanent delete where Synology Drive supports it. If false, move to Synology Drive trash.',
+    )
     .default(false),
   confirm: z.boolean().describe('REQUIRED: must be true to execute deletion').default(false),
 });

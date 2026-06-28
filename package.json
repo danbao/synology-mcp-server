@@ -53,6 +53,9 @@
     "lint:fix": "eslint src --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "typecheck": "tsc --noEmit",
+    "smoke:readonly": "pnpm build && node scripts/smoke-mcp.mjs readonly",
+    "smoke:write": "pnpm build && node scripts/smoke-mcp.mjs write",
+    "smoke:spreadsheet": "node scripts/smoke-spreadsheet.mjs",
     "prepare": "husky"
   },
   "dependencies": {

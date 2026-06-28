@@ -9,6 +9,7 @@ import { sanitizePath } from '../../utils/path-guard.js';
 import { NetworkError } from '../../errors.js';
 import { mapSynologyError } from '../../utils/synology-error-map.js';
 import { httpFetch, type FetchResponse } from '../../utils/http-fetch.js';
+import type { SynologyResponse, SynoDriveFile } from '../../types/synology-types.js';
 import type { SynoDriveUploadResponse } from './raw-response-types.js';
 import type { DriveUploadResult, DriveDownloadResult } from './drive-types.js';
 
@@ -30,6 +31,17 @@ export interface UploadOpts {
   conflict_action: 'version' | 'autorename' | 'skip';
 }
 
+function joinDrivePath(parentPath: string, name: string): string {
+  const parent = sanitizePath(parentPath).replace(/\/+$/, '');
+  const child = name.replace(/^\/+/, '');
+  return `${parent}/${child}`;
+}
+
+type DownloadAttempt =
+  | { success: true; response: FetchResponse; contentType: string }
+  | { success: false; status: number; code?: number };
+type DownloadFailure = Extract<DownloadAttempt, { success: false }>;
+
 /**
  * Upload a file via multipart/form-data.
  * Decodes base64 content to Buffer and attaches as the `file` field.
@@ -38,11 +50,12 @@ export interface UploadOpts {
 export async function upload(deps: TransferDeps, opts: UploadOpts): Promise<DriveUploadResult> {
   const sid = await deps.getToken();
   const buffer = Buffer.from(opts.content_base64, 'base64');
+  const filePath = joinDrivePath(opts.dest_folder_path, opts.file_name);
 
   const form = new FormData();
-  form.append('dest_folder_path', sanitizePath(opts.dest_folder_path));
+  form.append('path', filePath);
+  form.append('type', 'file');
   form.append('conflict_action', opts.conflict_action);
-  form.append('_sid', sid);
   form.append('file', buffer, { filename: opts.file_name, contentType: opts.mime_type });
 
   const qs = new URLSearchParams({
@@ -53,7 +66,7 @@ export async function upload(deps: TransferDeps, opts: UploadOpts): Promise<Driv
   const url = `${deps.baseUrl}/webapi/entry.cgi?${qs.toString()}`;
   const init: Record<string, unknown> = {
     method: 'POST',
-    headers: form.getHeaders(),
+    headers: { ...form.getHeaders(), Cookie: `id=${sid}` },
     body: form.getBuffer(),
     signal: AbortSignal.timeout(60_000),
   };
@@ -86,7 +99,7 @@ export async function upload(deps: TransferDeps, opts: UploadOpts): Promise<Driv
   return {
     success: true,
     file_id: envelope.data.file_id,
-    file_path: envelope.data.path,
+    file_path: envelope.data.display_path ?? envelope.data.path,
     file_name: envelope.data.name,
   };
 }
@@ -97,11 +110,52 @@ export async function upload(deps: TransferDeps, opts: UploadOpts): Promise<Driv
  */
 export async function download(deps: TransferDeps, filePath: string): Promise<DriveDownloadResult> {
   const sid = await deps.getToken();
+  const attempts: Array<Record<string, string>> = [{ path: sanitizePath(filePath) }];
+  const fileId = await resolveDriveFileId(deps, sid, filePath);
+  if (fileId !== undefined) {
+    attempts.push({ path: `id:${fileId}` });
+    attempts.push({ files: JSON.stringify([`id:${fileId}`]) });
+  }
+
+  let lastFailure: DownloadFailure | undefined;
+  for (const params of attempts) {
+    const attempt = await attemptDownload(deps, sid, params);
+    if (attempt.success) {
+      return await responseToDownloadResult(attempt.response, attempt.contentType, filePath);
+    }
+    lastFailure = attempt;
+  }
+
+  if (lastFailure?.code !== undefined) {
+    throw mapSynologyError(lastFailure.code, 'SYNO.SynologyDrive.Files');
+  }
+  throw new NetworkError(`Download HTTP error: ${lastFailure?.status ?? 'unknown'}`);
+}
+
+async function responseToDownloadResult(
+  response: FetchResponse,
+  contentType: string,
+  filePath: string,
+): Promise<DriveDownloadResult> {
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const disposition = response.headers.get('content-disposition') ?? '';
+  const fnMatch = /filename[^;=\n]*=(?:(['"])(?<q>[^'"]*)\1|(?<bare>[^;\n]*))/i.exec(disposition);
+  const filename =
+    fnMatch?.groups?.['q'] ?? fnMatch?.groups?.['bare'] ?? filePath.split('/').pop() ?? 'download';
+
+  return { buffer, filename, mimeType: contentType };
+}
+
+async function attemptDownload(
+  deps: TransferDeps,
+  sid: string,
+  params: Record<string, string>,
+): Promise<DownloadAttempt> {
   const qs = new URLSearchParams({
     api: 'SYNO.SynologyDrive.Files',
     version: '2',
     method: 'download',
-    path: sanitizePath(filePath),
+    ...params,
   });
   const url = `${deps.baseUrl}/webapi/entry.cgi?${qs.toString()}`;
   const init: Record<string, unknown> = {
@@ -117,24 +171,43 @@ export async function download(deps: TransferDeps, filePath: string): Promise<Dr
     throw new NetworkError(`Download failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 
-  if (!response.ok) {
-    throw new NetworkError(`Download HTTP error: ${response.status}`);
-  }
+  if (!response.ok) return { success: false, status: response.status };
 
   const contentType = response.headers.get('content-type') ?? 'application/octet-stream';
-  // JSON content-type signals an error envelope (e.g. file not found)
   if (contentType.includes('application/json')) {
     const errJson = (await response.json()) as { success: boolean; error?: { code: number } };
     if (!errJson.success) {
-      throw mapSynologyError(errJson.error?.code ?? 100, 'SYNO.SynologyDrive.Files');
+      return { success: false, status: response.status, code: errJson.error?.code ?? 100 };
     }
   }
 
-  const buffer = Buffer.from(await response.arrayBuffer());
-  const disposition = response.headers.get('content-disposition') ?? '';
-  const fnMatch = /filename[^;=\n]*=(?:(['"])(?<q>[^'"]*)\1|(?<bare>[^;\n]*))/i.exec(disposition);
-  const filename =
-    fnMatch?.groups?.['q'] ?? fnMatch?.groups?.['bare'] ?? filePath.split('/').pop() ?? 'download';
+  return { success: true, response, contentType };
+}
 
-  return { buffer, filename, mimeType: contentType };
+async function resolveDriveFileId(
+  deps: TransferDeps,
+  sid: string,
+  filePath: string,
+): Promise<string | undefined> {
+  const qs = new URLSearchParams({
+    api: 'SYNO.SynologyDrive.Files',
+    version: '2',
+    method: 'get',
+    path: sanitizePath(filePath),
+  });
+  const url = `${deps.baseUrl}/webapi/entry.cgi?${qs.toString()}`;
+  const init: Record<string, unknown> = {
+    method: 'GET',
+    headers: { Cookie: `id=${sid}` },
+    signal: AbortSignal.timeout(60_000),
+  };
+
+  try {
+    const response = await httpFetch(url, init, deps.dispatcher);
+    if (!response.ok) return undefined;
+    const json = (await response.json()) as SynologyResponse<SynoDriveFile>;
+    return json.success ? json.data?.file_id : undefined;
+  } catch {
+    return undefined;
+  }
 }

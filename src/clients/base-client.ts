@@ -34,6 +34,8 @@ export interface RequestOptions {
    * session-expired codes (119, 108) or HTTP 401.
    */
   retryOn401?: boolean;
+  /** Some mutation endpoints return success=true without a data object. */
+  allowEmptyData?: boolean;
 }
 
 /**
@@ -77,7 +79,14 @@ export abstract class BaseClient {
    * @throws {SynologyMcpError} On any Synology API error code.
    */
   protected async request<T>(options: RequestOptions): Promise<T> {
-    const { endpoint, method = 'GET', params = {}, body, retryOn401 = true } = options;
+    const {
+      endpoint,
+      method = 'GET',
+      params = {},
+      body,
+      retryOn401 = true,
+      allowEmptyData = false,
+    } = options;
 
     const sid = await this.authManager.getToken();
     // Send _sid via Cookie header (Synology supports format=cookie sessions)
@@ -101,6 +110,10 @@ export abstract class BaseClient {
       }
 
       throw mapSynologyError(code, String(params['api'] ?? endpoint));
+    }
+
+    if (allowEmptyData && raw.data === undefined) {
+      return {} as T;
     }
 
     return this.unwrap<T>(raw as SynologyResponse<T>);

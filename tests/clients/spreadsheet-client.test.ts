@@ -5,13 +5,22 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { setupServer } from 'msw/node';
-import { allHandlers } from '../mocks/synology-handlers.js';
-import { createTestSpreadsheetClient } from '../mocks/test-client-factory.js';
+import {
+  allHandlers,
+  clearSpreadsheetRequestLog,
+  spreadsheetRequestLog,
+} from '../mocks/synology-handlers.js';
+import { createTestSpreadsheetClient, TEST_CONFIG } from '../mocks/test-client-factory.js';
+import { SpreadsheetAuthManager } from '../../src/auth/spreadsheet-auth-manager.js';
+import { SpreadsheetClient } from '../../src/clients/spreadsheet-client.js';
 
 const server = setupServer(...allHandlers);
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  clearSpreadsheetRequestLog();
+});
 afterAll(() => server.close());
 
 describe('SpreadsheetClient.getInfo', () => {
@@ -64,6 +73,11 @@ describe('SpreadsheetClient.setCells', () => {
       values: [['Hello', 'World']],
     });
     expect(result.success).toBe(true);
+    expect(spreadsheetRequestLog.at(-1)).toMatchObject({
+      httpMethod: 'PUT',
+      path: '/spreadsheets/sheet-001/values/Sheet1!A1%3AB1',
+      body: { values: [['Hello', 'World']] },
+    });
   });
 
   it('throws on not-found file_id', async () => {
@@ -84,6 +98,44 @@ describe('SpreadsheetClient.create', () => {
     const client = createTestSpreadsheetClient();
     const result = await client.create({ name: 'NewSheet' });
     expect(result.file_id).toBe('new-sheet-001');
+    expect(spreadsheetRequestLog.at(-1)).toMatchObject({
+      httpMethod: 'POST',
+      path: '/spreadsheets/create',
+      body: { name: 'NewSheet' },
+    });
+  });
+
+  it('authorizes with dedicated Spreadsheet credentials when configured', async () => {
+    const config = {
+      ...TEST_CONFIG,
+      otpSecret: 'GEZDGNBVGY3TQOJQ',
+      spreadsheetUsername: 'office-bot',
+      spreadsheetPassword: 'office-secret',
+    };
+    const client = new SpreadsheetClient(config, new SpreadsheetAuthManager(config));
+    const result = await client.create({ name: 'NewSheet' });
+    expect(result.file_id).toBe('new-sheet-001');
+    expect(spreadsheetRequestLog[0]).toMatchObject({
+      httpMethod: 'POST',
+      path: '/spreadsheets/authorize',
+      body: {
+        username: 'office-bot',
+        password: 'office-secret',
+        host: 'nas.local:5000',
+        protocol: 'http',
+      },
+    });
+  });
+
+  it('fails before /authorize when main DSM account uses OTP without dedicated Spreadsheet credentials', async () => {
+    const config = {
+      ...TEST_CONFIG,
+      otpSecret: 'GEZDGNBVGY3TQOJQ',
+    };
+    const client = new SpreadsheetClient(config, new SpreadsheetAuthManager(config));
+
+    await expect(client.create({ name: 'NewSheet' })).rejects.toThrow(/SYNO_SS_USERNAME/);
+    expect(spreadsheetRequestLog).toHaveLength(0);
   });
 });
 
@@ -96,6 +148,11 @@ describe('SpreadsheetClient.addSheet', () => {
     });
     expect(result.success).toBe(true);
     expect(result.sheet_id).toBe('new-sheet-tab-001');
+    expect(spreadsheetRequestLog.at(-1)).toMatchObject({
+      httpMethod: 'POST',
+      path: '/spreadsheets/sheet-001/sheet/add',
+      body: { sheetName: 'NewTab' },
+    });
   });
 
   it('throws on not-found file_id', async () => {
@@ -111,6 +168,10 @@ describe('SpreadsheetClient.exportFile', () => {
     expect(result.buffer).toBeInstanceOf(Buffer);
     expect(result.buffer.length).toBeGreaterThan(0);
     expect(result.file_name).toBe('Budget.xlsx');
+    expect(spreadsheetRequestLog.at(-1)).toMatchObject({
+      httpMethod: 'GET',
+      path: '/spreadsheets/sheet-001/xlsx',
+    });
   });
 });
 
@@ -125,6 +186,16 @@ describe('SpreadsheetClient.writeStyles', () => {
       styles: [[{ textFormat: { bold: true } }]],
     });
     expect(result.success).toBe(true);
+    expect(spreadsheetRequestLog.at(-1)).toMatchObject({
+      httpMethod: 'PUT',
+      path: '/spreadsheets/sheet-001/styles',
+      body: {
+        sheetName: 'Sheet1',
+        startRow: 0,
+        startCol: 0,
+        rows: [{ values: [{ userEnteredFormat: { textFormat: { bold: true } } }] }],
+      },
+    });
   });
 
   it('throws on 404 endpoint', async () => {
@@ -146,6 +217,11 @@ describe('SpreadsheetClient.deleteSpreadsheet', () => {
     const client = createTestSpreadsheetClient();
     const result = await client.deleteSpreadsheet('sheet-001');
     expect(result.spreadsheetId).toBe('sheet-001');
+    expect(spreadsheetRequestLog.at(-1)).toMatchObject({
+      httpMethod: 'POST',
+      path: '/spreadsheets/delete',
+      body: { spreadsheetId: 'sheet-001' },
+    });
   });
 
   it('throws on 404', async () => {

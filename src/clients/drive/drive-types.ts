@@ -70,7 +70,7 @@ export interface DriveMoveResult {
 export interface DriveLabel {
   id: string;
   name: string;
-  color: 'gray' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple';
+  color: string;
 }
 
 /** Sharing link result */

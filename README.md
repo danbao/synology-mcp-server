@@ -144,6 +144,8 @@ export SYNO_OTP_SECRET=base32_totp_seed_from_authenticator
 export SYNO_SS_HOST=192.168.1.100      # Host running synology/spreadsheet-api
 export SYNO_SS_PORT=3000               # Container port (default 3000)
 export SYNO_SS_HTTPS=false             # Container default is plain HTTP
+export SYNO_SS_USERNAME=office_bot     # Optional no-2FA DSM account for Spreadsheet
+export SYNO_SS_PASSWORD=office_secret
 
 # ---- Spreadsheet container's back-call to DSM (advanced) ----
 # Override only when the container can't TLS-verify DSM (e.g. self-signed cert).
@@ -153,7 +155,7 @@ export SYNO_SS_DSM_PORT=5000           # Use DSM HTTP port to bypass cert issues
 export SYNO_SS_DSM_HTTPS=false         # false → skip TLS verify on back-call
 ```
 
-> **2FA accounts:** DSM session login can use `SYNO_OTP_CODE` or generate codes from `SYNO_OTP_SECRET`, but the Spreadsheet `/authorize` endpoint does **not** accept OTP. Prefer a dedicated DSM service account **without** 2FA for unattended automation.
+> **2FA accounts:** DSM session login can use `SYNO_OTP_CODE` or generate codes from `SYNO_OTP_SECRET`, but the Spreadsheet `/authorize` endpoint does **not** accept OTP. Set `SYNO_SS_USERNAME` / `SYNO_SS_PASSWORD` to a dedicated DSM service account **without** 2FA for Spreadsheet automation.
 
 ### 3. Run the MCP server
 
@@ -233,8 +235,10 @@ Quick summary by module:
         "SYNO_SS_HOST": "192.168.1.100",
         "SYNO_SS_PORT": "3000",
         "SYNO_SS_HTTPS": "false",
+        "SYNO_SS_USERNAME": "office_bot",
+        "SYNO_SS_PASSWORD": "office_secret",
         "SYNO_SS_DSM_HOST": "192.168.1.100",
-        "SYNO_SS_DSM_PORT": "5001",
+        "SYNO_SS_DSM_PORT": "5000",
         "SYNO_SS_DSM_HTTPS": "false"
       }
     }
@@ -259,6 +263,8 @@ claude mcp add --scope user synology \
   -e SYNO_SS_HOST=192.168.1.100 \
   -e SYNO_SS_PORT=3000 \
   -e SYNO_SS_HTTPS=false \
+  -e SYNO_SS_USERNAME=office_bot \
+  -e 'SYNO_SS_PASSWORD=office_secret' \
   -e SYNO_SS_DSM_HOST=192.168.1.100 \
   -e SYNO_SS_DSM_PORT=5000 \
   -e SYNO_SS_DSM_HTTPS=false \
@@ -355,6 +361,9 @@ pnpm format             # prettier --write
 pnpm test               # vitest run
 pnpm test:coverage      # vitest run --coverage
 pnpm build              # tsup → dist/
+pnpm smoke:readonly     # real NAS non-destructive MCP smoke
+pnpm smoke:write        # real NAS temporary write smoke + cleanup
+pnpm smoke:spreadsheet  # direct synology/spreadsheet-api container smoke
 ```
 
 Pre-commit hooks (Husky + lint-staged) run typecheck, lint, and Prettier on staged files.
@@ -367,20 +376,20 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contributor workflow.
 
 | Layer | Tooling | Notes |
 |---|---|---|
-| Unit | [Vitest](https://vitest.dev) | All modules in `tests/` — 311 tests |
+| Unit | [Vitest](https://vitest.dev) | All modules in `tests/` — 359 tests |
 | HTTP mocking | [MSW](https://mswjs.io) | No real NAS required for unit tests |
-| Smoke | Vitest, gated by `SMOKE_TEST=1` | Hits a real NAS — disabled in CI |
+| Smoke | `scripts/smoke-mcp.mjs` | Hits a real NAS via MCP stdio — disabled in CI |
 
 ```bash
-pnpm test               # unit only
-SMOKE_TEST=1 \
-  SYNO_HOST=192.168.1.100 \
-  SYNO_USERNAME=user \
-  SYNO_PASSWORD=pass \
-  pnpm test             # include smoke tests (requires real NAS)
+pnpm test               # unit only, no real NAS
+pnpm smoke:readonly     # list/get/export/download only
+pnpm smoke:write        # temporary create/update/move/delete/send where configured
+pnpm smoke:spreadsheet  # direct Spreadsheet API container create/write/delete probe
 ```
 
-See [`examples/smoke-test.ts`](./examples/smoke-test.ts) for a standalone runnable smoke script.
+Smoke resources are named `synology-mcp-smoke-<timestamp>` and cleaned up after the run; Drive cleanup moves temporary folders to Drive trash, and Drive label smoke creates/deletes a temporary label when no label exists. MailPlus send smoke uses `SMOKE_MAILPLUS_RECIPIENT`, `SYNO_USERNAME` when it is an email address, or the default MailPlus SMTP sender for a self-addressed test. Spreadsheet deep read/write smoke requires the Synology Spreadsheet API container to authenticate a DSM account; when the main DSM account uses OTP, set `SYNO_SS_USERNAME` / `SYNO_SS_PASSWORD` to a no-2FA service account or Spreadsheet API calls beyond `spreadsheet_list` are skipped.
+
+Run real NAS smoke commands sequentially. DSM OTP logins can reject concurrent sessions during the same TOTP window.
 
 ---
 
@@ -393,6 +402,7 @@ See [`examples/smoke-test.ts`](./examples/smoke-test.ts) for a standalone runnab
 | [deployment-guide.md](./deployment-guide.md) | Docker, systemd unit, Synology scheduled task |
 | [integration-guide.md](./integration-guide.md) | Client wiring (Claude, Cursor, Codex, LangChain, …) |
 | [troubleshooting.md](./troubleshooting.md) | Common Synology error codes + fixes |
+| [interface-matrix.md](./interface-matrix.md) | MCP tool → Synology API/version/request-shape matrix |
 | [security-model.md](./security-model.md) | Detailed threat model |
 | [CHANGELOG.md](./CHANGELOG.md) | Versioned release notes |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | Contributor workflow |
