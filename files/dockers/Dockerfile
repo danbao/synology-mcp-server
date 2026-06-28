@@ -1,5 +1,5 @@
 # Multi-stage Dockerfile for synology-office-mcp
-# Build: docker build -t synology-office-mcp:0.6.0 -f files/dockers/Dockerfile .
+# Build: docker build -t synology-office-mcp:0.6.1 -f files/dockers/Dockerfile .
 
 FROM node:22-alpine AS build
 WORKDIR /app

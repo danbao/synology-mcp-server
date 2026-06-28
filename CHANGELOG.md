@@ -8,8 +8,16 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+---
+
+## [0.6.1] - 2026-06-28
+
 ### Added
 - `SYNO_OTP_SECRET` can generate DSM TOTP login codes automatically, while `SYNO_OTP_CODE` remains available for short-lived manual debugging.
+- GitHub Actions CI now runs typecheck, lint, tests, build, and Docker build for pull requests.
+
+### Fixed
+- MailPlus availability checks no longer misreport DSM 2FA login challenges as `MODULE_UNAVAILABLE`.
 
 ---
 
@@ -298,7 +306,8 @@ DSM 7.3.2 returned error 102 ("API does not exist") for legacy namespaces. Renam
 
 ---
 
-[Unreleased]: https://github.com/danbao/synology-mcp-server/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/danbao/synology-mcp-server/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/danbao/synology-mcp-server/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/danbao/synology-mcp-server/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/danbao/synology-mcp-server/releases/tag/v0.5.0
 [0.3.3]: https://github.com/danbao/synology-mcp-server/compare/v0.3.2...v0.3.3

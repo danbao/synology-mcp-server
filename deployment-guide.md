@@ -55,7 +55,7 @@ Run the MCP server in a container on your laptop / workstation. The container ta
 The repo ships a multi-stage [`files/dockers/Dockerfile`](./files/dockers/Dockerfile). Build from repo root:
 
 ```bash
-docker build -t synology-office-mcp:0.6.0 -f files/dockers/Dockerfile .
+docker build -t synology-office-mcp:0.6.1 -f files/dockers/Dockerfile .
 ```
 
 ### 1.3 Run — stdio (for Claude Desktop / Claude Code)
@@ -71,7 +71,7 @@ stdio mode requires the client to spawn the process directly. Wire Docker as the
       "args": [
         "run", "--rm", "-i",
         "--env-file", "/absolute/path/to/.env",
-        "ghcr.io/danbao/synology-office-mcp:0.6.0"
+        "ghcr.io/danbao/synology-office-mcp:0.6.1"
       ]
     }
   }
@@ -91,7 +91,7 @@ docker run -d \
   -e MCP_HTTP_PATH=/mcp \
   -e MCP_AUTH_TOKEN="$(openssl rand -hex 32)" \
   -p 127.0.0.1:3100:3100 \
-  ghcr.io/danbao/synology-office-mcp:0.6.0
+  ghcr.io/danbao/synology-office-mcp:0.6.1
 ```
 
 Verify:
@@ -260,15 +260,15 @@ Run the MCP server inside **Container Manager** (formerly Docker) on the NAS its
 **Option A — build locally, save, transfer:**
 
 ```bash
-docker build -t synology-office-mcp:0.6.0 .
-docker save synology-office-mcp:0.6.0 | gzip > synology-office-mcp-0.6.0.tar.gz
-scp synology-office-mcp-0.6.0.tar.gz admin@nas:/volume1/docker/
+docker build -t synology-office-mcp:0.6.1 .
+docker save synology-office-mcp:0.6.1 | gzip > synology-office-mcp-0.6.1.tar.gz
+scp synology-office-mcp-0.6.1.tar.gz admin@nas:/volume1/docker/
 ```
 
 Then on the NAS (SSH or Container Manager → Image → Add → From file):
 
 ```bash
-gunzip -c /volume1/docker/synology-office-mcp-0.6.0.tar.gz | sudo docker load
+gunzip -c /volume1/docker/synology-office-mcp-0.6.1.tar.gz | sudo docker load
 ```
 
 **Option B — build on NAS via SSH** (requires Node toolchain in the build stage; multi-stage `Dockerfile` above handles it):
@@ -276,7 +276,7 @@ gunzip -c /volume1/docker/synology-office-mcp-0.6.0.tar.gz | sudo docker load
 ```bash
 ssh admin@nas
 cd /volume1/docker/synology-office-mcp
-sudo docker build -t synology-office-mcp:0.6.0 .
+sudo docker build -t synology-office-mcp:0.6.1 .
 ```
 
 ### 3.3 Create `.env` on the NAS
