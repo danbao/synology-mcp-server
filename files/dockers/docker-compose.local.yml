@@ -1,10 +1,10 @@
-# Local workstation deployment (SSE transport)
+# Local/LAN deployment (Streamable HTTP transport)
 # Usage:
-#   cp .env.example .env   # populate SYNO_* values
+#   cp .env.example .env   # populate SYNO_* values and MCP_AUTH_TOKEN
 #   docker compose -f files/dockers/docker-compose.local.yml up -d
 #
-# Binds SSE to 127.0.0.1 only. For LAN exposure, set MCP_AUTH_TOKEN
-# and change the published port to "0.0.0.0:3100:3100".
+# Publishes Streamable HTTP on 127.0.0.1 by default. For LAN exposure,
+# change the published port to "0.0.0.0:3100:3100" or "<LAN_IP>:3100:3100".
 
 services:
   synology-mcp:
@@ -14,10 +14,13 @@ services:
       dockerfile: files/dockers/Dockerfile
     container_name: synology-mcp
     restart: unless-stopped
-    env_file: ../../.env
+    env_file:
+      - path: ../../.env
+        required: false
     environment:
-      MCP_TRANSPORT: sse
-      MCP_SSE_HOST: 0.0.0.0
-      MCP_SSE_PORT: 3100
+      MCP_TRANSPORT: streamable-http
+      MCP_HTTP_HOST: 0.0.0.0
+      MCP_HTTP_PORT: 3100
+      MCP_HTTP_PATH: /mcp
     ports:
       - '127.0.0.1:3100:3100'

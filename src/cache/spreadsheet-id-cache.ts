@@ -65,7 +65,11 @@ export class SpreadsheetIdCache {
       throw new NameNotFoundError(name);
     }
     if (matches.length === 1) {
-      return matches[0]!.spreadsheetId;
+      const [match] = matches;
+      if (match === undefined) {
+        throw new NameNotFoundError(name);
+      }
+      return match.spreadsheetId;
     }
     if (drivePath !== undefined) {
       const exact = matches.find((e) => e.path === drivePath);

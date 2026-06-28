@@ -10,7 +10,7 @@ This guide covers four deployment topologies for **synology-office-mcp**. Pick t
 | [4](#4-on-nas--without-docker) | NAS (Task Scheduler / SSH) | ❌ No | Minimal footprint, direct loopback to DSM APIs |
 
 > [!NOTE]
-> Pre-1.0 status (`v0.3.x`). All four modules (Drive, Spreadsheet, MailPlus, Calendar) and both transports (stdio + SSE) are wired. Smoke validation against a real DSM 7.2.2 NAS is pending before `1.0.0`.
+> Pre-1.0 status. All four modules (Drive, Spreadsheet, MailPlus, Calendar) and both transports (stdio + Streamable HTTP) are wired. Smoke validation against a real DSM NAS is recommended before production use.
 
 ---
 
@@ -29,16 +29,16 @@ SYNO_PASSWORD=your_nas_password
 ```
 
 > [!IMPORTANT]
-> If your NAS uses a self-signed TLS certificate, set `SYNO_IGNORE_CERT=true` only on trusted home networks. If you use 2FA, prefer a DSM **app-specific password** over `SYNO_OTP_CODE`.
+> If your NAS uses a self-signed TLS certificate, set `SYNO_IGNORE_CERT=true` only on trusted home networks. For unattended automation, prefer a dedicated low-privilege DSM service account; Spreadsheet automation should avoid 2FA accounts because the Spreadsheet API does not accept OTP.
 
 ### Choosing the transport
 
 | Transport | When to use | Required env |
 |---|---|---|
 | `stdio` (default) | MCP client lives on the same host (Claude Desktop, Claude Code, GoClaw) | none |
-| `sse` | Remote MCP clients, multi-host setups | `MCP_TRANSPORT=sse`, `MCP_SSE_HOST`, `MCP_SSE_PORT`, `MCP_AUTH_TOKEN` (required for non-loopback bind) |
+| `streamable-http` | Remote MCP clients, Docker/LAN setups | `MCP_TRANSPORT=streamable-http`, `MCP_HTTP_HOST`, `MCP_HTTP_PORT`, `MCP_HTTP_PATH`, `MCP_AUTH_TOKEN` |
 
-> The server **refuses to start** when SSE is bound to a non-loopback host without `MCP_AUTH_TOKEN`. Generate one with `openssl rand -hex 32`.
+> The server **refuses to start** in Streamable HTTP mode without `MCP_AUTH_TOKEN`. Generate one with `openssl rand -hex 32`.
 
 ---
 
@@ -78,16 +78,17 @@ stdio mode requires the client to spawn the process directly. Wire Docker as the
 }
 ```
 
-### 1.4 Run — SSE (long-running daemon)
+### 1.4 Run — Streamable HTTP (long-running daemon)
 
 ```bash
 docker run -d \
   --name synology-mcp \
   --restart unless-stopped \
   --env-file ./.env \
-  -e MCP_TRANSPORT=sse \
-  -e MCP_SSE_HOST=0.0.0.0 \
-  -e MCP_SSE_PORT=3100 \
+  -e MCP_TRANSPORT=streamable-http \
+  -e MCP_HTTP_HOST=0.0.0.0 \
+  -e MCP_HTTP_PORT=3100 \
+  -e MCP_HTTP_PATH=/mcp \
   -e MCP_AUTH_TOKEN="$(openssl rand -hex 32)" \
   -p 127.0.0.1:3100:3100 \
   synology-office-mcp:0.3.3
@@ -97,7 +98,7 @@ Verify:
 
 ```bash
 docker logs -f synology-mcp
-curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3100/sse
+curl -i -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3100/mcp
 ```
 
 ### 1.5 docker-compose alternative
@@ -162,12 +163,14 @@ Or, for Claude Code:
 claude mcp add synology -- node /absolute/path/to/synology-office-mcp/dist/index.js
 ```
 
-### 2.4 Run — SSE (background daemon)
+### 2.4 Run — Streamable HTTP (background daemon)
 
 ```bash
-MCP_TRANSPORT=sse \
-MCP_SSE_HOST=127.0.0.1 \
-MCP_SSE_PORT=3100 \
+MCP_TRANSPORT=streamable-http \
+MCP_HTTP_HOST=127.0.0.1 \
+MCP_HTTP_PORT=3100 \
+MCP_HTTP_PATH=/mcp \
+MCP_AUTH_TOKEN="$(openssl rand -hex 32)" \
 node dist/index.js
 ```
 
@@ -191,9 +194,11 @@ Keep it alive across reboots with **launchd** (macOS) or **systemd** (Linux).
   </array>
   <key>EnvironmentVariables</key>
   <dict>
-    <key>MCP_TRANSPORT</key><string>sse</string>
-    <key>MCP_SSE_HOST</key><string>127.0.0.1</string>
-    <key>MCP_SSE_PORT</key><string>3100</string>
+    <key>MCP_TRANSPORT</key><string>streamable-http</string>
+    <key>MCP_HTTP_HOST</key><string>127.0.0.1</string>
+    <key>MCP_HTTP_PORT</key><string>3100</string>
+    <key>MCP_HTTP_PATH</key><string>/mcp</string>
+    <key>MCP_AUTH_TOKEN</key><string>replace-with-openssl-rand-hex-32</string>
   </dict>
   <key>WorkingDirectory</key><string>/Users/you/synology-office-mcp</string>
   <key>RunAtLoad</key><true/>
@@ -220,9 +225,11 @@ After=network-online.target
 [Service]
 WorkingDirectory=%h/synology-office-mcp
 EnvironmentFile=%h/synology-office-mcp/.env
-Environment=MCP_TRANSPORT=sse
-Environment=MCP_SSE_HOST=127.0.0.1
-Environment=MCP_SSE_PORT=3100
+Environment=MCP_TRANSPORT=streamable-http
+Environment=MCP_HTTP_HOST=127.0.0.1
+Environment=MCP_HTTP_PORT=3100
+Environment=MCP_HTTP_PATH=/mcp
+Environment=MCP_AUTH_TOKEN=replace-with-openssl-rand-hex-32
 ExecStart=/usr/bin/node dist/index.js
 Restart=on-failure
 RestartSec=5
@@ -283,9 +290,10 @@ SYNO_HTTPS=true
 SYNO_IGNORE_CERT=true   # DSM's loopback cert is self-signed
 SYNO_USERNAME=mcp_service_user
 SYNO_PASSWORD=...
-MCP_TRANSPORT=sse
-MCP_SSE_HOST=0.0.0.0
-MCP_SSE_PORT=3100
+MCP_TRANSPORT=streamable-http
+MCP_HTTP_HOST=0.0.0.0
+MCP_HTTP_PORT=3100
+MCP_HTTP_PATH=/mcp
 MCP_AUTH_TOKEN=...      # openssl rand -hex 32
 ```
 
@@ -315,10 +323,10 @@ Recommended path: keep the container on `127.0.0.1` and front it with **DSM Reve
 | Destination hostname | `localhost` |
 | Destination port | `3100` |
 
-Add a custom header to forward `Authorization` if DSM strips it. Clients then connect to `https://mcp.your-nas.local:3443/sse` with `Authorization: Bearer $MCP_AUTH_TOKEN`.
+Add a custom header to forward `Authorization` if DSM strips it. Clients then connect to `https://mcp.your-nas.local:3443/mcp` with `Authorization: Bearer $MCP_AUTH_TOKEN`.
 
 > [!IMPORTANT]
-> If you skip the reverse proxy and bind the container to LAN directly (e.g. `MCP_SSE_HOST=0.0.0.0`), `MCP_AUTH_TOKEN` is **mandatory** — the server will refuse to start without it.
+> `MCP_AUTH_TOKEN` is **mandatory** for Streamable HTTP even on trusted LAN deployments.
 
 ---
 
@@ -392,7 +400,7 @@ node dist/index.js
 
 ### 4.5 Reverse proxy
 
-Same DSM Reverse Proxy setup as **§3.5** — point `localhost:3100` at `https://mcp.your-nas.local:3443/sse`.
+Same DSM Reverse Proxy setup as **§3.5** — point `localhost:3100` at `https://mcp.your-nas.local:3443/mcp`.
 
 ---
 
@@ -403,10 +411,10 @@ Same DSM Reverse Proxy setup as **§3.5** — point `localhost:3100` at `https:/
 | Process is up | `ps aux \| grep synology-office-mcp` (or `docker ps`) | One running instance |
 | Config validated | first stderr line | `synology-office-mcp starting...` followed by `Config loaded — transport: …` |
 | NAS reachable | `curl -k https://$SYNO_HOST:$SYNO_PORT/webapi/query.cgi?api=SYNO.API.Info&version=1&method=query` | JSON response |
-| SSE auth (if enabled) | `curl -i -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3100/sse` | `200 OK`, `text/event-stream` |
+| Streamable HTTP auth | `curl -i -H "Authorization: Bearer $TOKEN" http://127.0.0.1:3100/mcp` | MCP JSON-RPC error or method-specific response, not `401` |
 | Logs are clean of secrets | `grep -E "passwd|_sid|otp_code" *.log` | no matches |
 
-If startup aborts with `Configuration validation failed:`, fix the listed env vars and restart. If you see `MCP_AUTH_TOKEN is required`, you bound SSE to a non-loopback host without setting a shared secret.
+If startup aborts with `Configuration validation failed:`, fix the listed env vars and restart. If you see `MCP_AUTH_TOKEN is required`, you enabled Streamable HTTP without setting a shared secret.
 
 ---
 
@@ -434,10 +442,10 @@ Always read [`CHANGELOG.md`](./CHANGELOG.md) before upgrading across a minor ver
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `Failed to reach Synology NAS` | Wrong `SYNO_HOST` / `SYNO_PORT` / firewall | `curl -k https://$SYNO_HOST:$SYNO_PORT` |
-| `AUTH_FAILED` (synoCode `400`/`401`) | Wrong credentials, or 2FA without OTP/app-pwd | Use a DSM app-specific password |
+| `AUTH_FAILED` (synoCode `400`/`401`) | Wrong credentials, or 2FA/OTP mismatch | Use a dedicated low-privilege DSM service account |
 | `AUTH_FAILED` (synoCode `407`) | IP blocked by DSM auto-block | Control Panel → Security → Auto Block → unblock |
 | TLS / cert errors | Self-signed NAS cert | `SYNO_IGNORE_CERT=true` (trusted networks only) |
-| `MCP_AUTH_TOKEN is required` | SSE bound to non-loopback without token | Set `MCP_AUTH_TOKEN` or bind to `127.0.0.1` |
+| `MCP_AUTH_TOKEN is required` | Streamable HTTP enabled without token | Set `MCP_AUTH_TOKEN` |
 | Container can't reach `127.0.0.1` on NAS | Bridge network instead of host | Use `network_mode: host` (see §3.4) |
 | stdio client says "server exited" | Config validation failed at startup | Check stderr for `Configuration validation failed:` and fix the listed env var |
 

@@ -15,15 +15,15 @@ import { SpreadsheetIdCache } from './cache/spreadsheet-id-cache.js';
 import { aggregateTools } from './tools/index.js';
 import { createServer } from './server/create-server.js';
 import { startStdioTransport } from './server/transport-stdio.js';
-import { startSseTransport } from './server/transport-sse.js';
+import { startStreamableHttpTransport } from './server/transport-streamable-http.js';
 import type { ToolContext } from './tools/types.js';
 
 // ---------------------------------------------------------------------------
-// CLI argument parsing (minimal: --transport, --port, --host)
+// CLI argument parsing (minimal: --transport, --port, --host, --path)
 // ---------------------------------------------------------------------------
 
-function parseArgs(argv: string[]): { transport?: string; port?: number; host?: string } {
-  const result: { transport?: string; port?: number; host?: string } = {};
+function parseArgs(argv: string[]): { transport?: string; port?: number; host?: string; path?: string } {
+  const result: { transport?: string; port?: number; host?: string; path?: string } = {};
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i] ?? '';
     if (arg === '--transport' && argv[i + 1] !== undefined) {
@@ -35,6 +35,9 @@ function parseArgs(argv: string[]): { transport?: string; port?: number; host?: 
     } else if (arg === '--host' && argv[i + 1] !== undefined) {
       const val = argv[++i];
       if (val !== undefined) result.host = val;
+    } else if (arg === '--path' && argv[i + 1] !== undefined) {
+      const val = argv[++i];
+      if (val !== undefined) result.path = val;
     } else if (arg.startsWith('--transport=')) {
       result.transport = arg.slice('--transport='.length);
     } else if (arg.startsWith('--port=')) {
@@ -42,6 +45,8 @@ function parseArgs(argv: string[]): { transport?: string; port?: number; host?: 
       if (!Number.isNaN(n)) result.port = n;
     } else if (arg.startsWith('--host=')) {
       result.host = arg.slice('--host='.length);
+    } else if (arg.startsWith('--path=')) {
+      result.path = arg.slice('--path='.length);
     }
   }
   return result;
@@ -59,10 +64,13 @@ async function main(): Promise<void> {
     process.env['MCP_TRANSPORT'] = cliArgs.transport;
   }
   if (cliArgs.port !== undefined) {
-    process.env['MCP_SSE_PORT'] = String(cliArgs.port);
+    process.env['MCP_HTTP_PORT'] = String(cliArgs.port);
   }
   if (cliArgs.host !== undefined && cliArgs.host !== '') {
-    process.env['MCP_SSE_HOST'] = cliArgs.host;
+    process.env['MCP_HTTP_HOST'] = cliArgs.host;
+  }
+  if (cliArgs.path !== undefined && cliArgs.path !== '') {
+    process.env['MCP_HTTP_PATH'] = cliArgs.path;
   }
 
   let config;
@@ -76,7 +84,9 @@ async function main(): Promise<void> {
 
   // Log startup info — redact auth token if present
   const transportInfo =
-    config.mcp.transport === 'sse' ? `sse on ${config.mcp.sseHost}:${config.mcp.ssePort}` : 'stdio';
+    config.mcp.transport === 'streamable-http'
+      ? `streamable-http on ${config.mcp.httpHost}:${config.mcp.httpPort}${config.mcp.httpPath}`
+      : 'stdio';
   const authInfo = config.mcp.authToken !== undefined ? ' [auth=enabled]' : '';
   process.stderr.write(
     `synology-office-mcp starting — transport: ${transportInfo}${authInfo}, NAS: ${config.synology.host}:${config.synology.port}\n`,
@@ -100,18 +110,18 @@ async function main(): Promise<void> {
   };
 
   const tools = aggregateTools(config.features);
-  const server = createServer(tools, ctx);
+  const makeServer = (): ReturnType<typeof createServer> => createServer(tools, ctx);
 
   // -------------------------------------------------------------------------
   // Graceful shutdown
   // -------------------------------------------------------------------------
-  let sseClose: (() => Promise<void>) | undefined;
+  let httpClose: (() => Promise<void>) | undefined;
 
   async function shutdown(signal: string): Promise<void> {
     process.stderr.write(`Received ${signal}, shutting down...\n`);
     try {
-      if (sseClose !== undefined) {
-        await sseClose();
+      if (httpClose !== undefined) {
+        await httpClose();
       }
       // 5s timeout on logout so a hung session never blocks exit
       await Promise.race([
@@ -132,18 +142,19 @@ async function main(): Promise<void> {
   // -------------------------------------------------------------------------
   // Start transport
   // -------------------------------------------------------------------------
-  if (config.mcp.transport === 'sse') {
-    const { close } = startSseTransport(server, {
-      host: config.mcp.sseHost,
-      port: config.mcp.ssePort,
-      ...(config.mcp.authToken !== undefined ? { authToken: config.mcp.authToken } : {}),
+  if (config.mcp.transport === 'streamable-http') {
+    const { close } = startStreamableHttpTransport(makeServer, {
+      host: config.mcp.httpHost,
+      port: config.mcp.httpPort,
+      path: config.mcp.httpPath,
+      authToken: config.mcp.authToken ?? '',
     });
-    sseClose = close;
+    httpClose = close;
     process.stderr.write(
-      `SSE transport listening on http://${config.mcp.sseHost}:${config.mcp.ssePort}/sse\n`,
+      `Streamable HTTP transport listening on http://${config.mcp.httpHost}:${config.mcp.httpPort}${config.mcp.httpPath}\n`,
     );
   } else {
-    await startStdioTransport(server);
+    await startStdioTransport(makeServer());
   }
 }
 

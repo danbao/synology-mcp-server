@@ -15,8 +15,8 @@
 |---|---|
 | Credential theft from logs | Credentials and session IDs are redacted from all log output via `redactSensitive()` |
 | Path traversal to escape Drive root | `pathGuard()` blocks `..` sequences and absolute escapes at tool boundary |
-| Unauthenticated SSE access from network | Bearer-token auth required for non-loopback SSE; server refuses to start without it |
-| Cross-origin SSE hijacking | `originGuard()` validates `Origin` / `Host` headers on SSE requests |
+| Unauthenticated Streamable HTTP access from network | Bearer-token auth required for Streamable HTTP; server refuses to start without it |
+| Cross-origin Streamable HTTP hijacking | `originGuard()` validates present `Origin` headers on `/mcp` requests |
 | MITM between server and NAS | TLS verification enabled by default; `SYNO_IGNORE_CERT=true` is opt-in, logged at startup |
 | Accidental destructive operations | All write/delete/send tools require explicit `"confirm": true` in tool input |
 | Supply-chain compromise of published package | npm publish uses `--provenance` for SLSA attestation |
@@ -45,12 +45,14 @@
 
 No network socket is opened. Communication is over stdin/stdout with the MCP client process. No auth required — the OS process model provides isolation.
 
-### SSE
+### Streamable HTTP
 
-- Binds to `127.0.0.1` by default
-- When `MCP_SSE_HOST` is set to a non-loopback address, `MCP_AUTH_TOKEN` is **mandatory** — the server refuses to start without it
+- Endpoint defaults to `http://127.0.0.1:3100/mcp`
+- Docker/LAN examples bind to `0.0.0.0:3100` and publish `/mcp`
+- `MCP_AUTH_TOKEN` is **mandatory** whenever `MCP_TRANSPORT=streamable-http`
 - `bearerAuth()` uses constant-time comparison (`crypto.timingSafeEqual`) to prevent timing attacks
-- `originGuard()` rejects SSE requests with unexpected `Origin` headers to block cross-origin access
+- `originGuard()` rejects requests with unexpected `Origin` headers to block cross-origin access
+- Non-browser clients that omit `Origin` must still present a valid Bearer token
 
 **Generating a strong token:**
 
@@ -62,10 +64,9 @@ openssl rand -hex 32
 
 ## Two-Factor Authentication
 
-If 2FA is enabled on the DSM account:
+For unattended MCP use, create a dedicated low-privilege DSM service account.
 
-1. **Preferred:** Create an **app-specific password** in DSM `Control Panel > User > Account > App Passwords`. Use it as `SYNO_PASSWORD`. No `SYNO_OTP_CODE` needed.
-2. **Alternative:** Set `SYNO_OTP_CODE` to the current TOTP code. This only works for single-session setups since TOTP codes expire in 30 seconds.
+If 2FA is enabled on the DSM account, `SYNO_OTP_CODE` can only help the DSM session login path and expires quickly. The Spreadsheet `/spreadsheets/authorize` endpoint does not accept OTP, so Spreadsheet automation should use a dedicated service account without 2FA enabled.
 
 ---
 

@@ -3,7 +3,7 @@
 How to wire **synology-office-mcp** into MCP-aware AI agents and clients. This guide assumes the server is already deployed (see [`deployment-guide.md`](./deployment-guide.md)) and reachable via either:
 
 - **stdio transport** — the client spawns `node dist/index.js` (or `docker run … -i`) as a subprocess, default mode.
-- **SSE transport** — the server runs as a long-lived HTTP daemon at `http://<host>:3100/sse`, optionally fronted by HTTPS reverse proxy and protected by `MCP_AUTH_TOKEN`.
+- **Streamable HTTP transport** — the server runs as a long-lived HTTP daemon at `http://<host>:3100/mcp`, optionally fronted by HTTPS reverse proxy and protected by `MCP_AUTH_TOKEN`.
 
 > [!NOTE]
 > Pre-1.0 status (`v0.3.x`). All 32 tools across Drive / Spreadsheet / MailPlus / Calendar are wired and unit-tested; smoke validation against a real DSM 7.2.2 NAS is pending before `1.0.0`.
@@ -14,18 +14,18 @@ How to wire **synology-office-mcp** into MCP-aware AI agents and clients. This g
 
 | Client | Native MCP support | Transport | Notes |
 |---|---|---|---|
-| [Claude Code (CLI)](#claude-code-cli) | ✅ | stdio, SSE | First-class. `claude mcp add`. |
+| [Claude Code (CLI)](#claude-code-cli) | ✅ | stdio, Streamable HTTP | First-class. `claude mcp add`. |
 | [Claude Desktop](#claude-desktop) | ✅ | stdio | Edit `claude_desktop_config.json`. |
-| [Cursor](#cursor) | ✅ | stdio, SSE | Settings → MCP. |
-| [Continue.dev](#continuedev) | ✅ | stdio, SSE | `~/.continue/config.json`. |
+| [Cursor](#cursor) | ✅ | stdio, Streamable HTTP | Settings → MCP. |
+| [Continue.dev](#continuedev) | ✅ | stdio, Streamable HTTP | `~/.continue/config.json`. |
 | [Windsurf / Codeium](#windsurf--codeium) | ✅ | stdio | `mcp_config.json`. |
 | [OpenAI Codex CLI](#openai-codex-cli) | ✅ (>=0.20) | stdio | `~/.codex/config.toml`. |
-| [Google Antigravity](#google-antigravity) | ✅ | stdio, SSE | Workspace MCP settings. |
+| [Google Antigravity](#google-antigravity) | ✅ | stdio, Streamable HTTP | Workspace MCP settings. |
 | [ChatGPT (custom GPT / Desktop)](#chatgpt) | ⚠️ Bridge | HTTPS + bridge | OpenAI Desktop MCP beta or HTTP-shim. |
-| [BabyAGI / AutoGPT-style frameworks](#babyagi--autogpt-style-frameworks) | ⚠️ SDK | stdio, SSE | Use `@modelcontextprotocol/sdk`. |
-| [LangChain / LangGraph](#langchain--langgraph) | ⚠️ Adapter | stdio, SSE | `langchain-mcp-adapters`. |
-| [LlamaIndex](#llamaindex) | ⚠️ Adapter | stdio, SSE | `llama-index-tools-mcp`. |
-| [Generic MCP SDK clients](#generic-mcp-sdk-clients) | ✅ | stdio, SSE | `@modelcontextprotocol/sdk` (TS) / `mcp` (Python). |
+| [BabyAGI / AutoGPT-style frameworks](#babyagi--autogpt-style-frameworks) | ⚠️ SDK | stdio, Streamable HTTP | Use official MCP SDK transports. |
+| [LangChain / LangGraph](#langchain--langgraph) | ⚠️ Adapter | stdio, Streamable HTTP | `langchain-mcp-adapters`. |
+| [LlamaIndex](#llamaindex) | ⚠️ Adapter | stdio, Streamable HTTP | `llama-index-tools-mcp`. |
+| [Generic MCP SDK clients](#generic-mcp-sdk-clients) | ✅ | stdio, Streamable HTTP | `@modelcontextprotocol/sdk` (TS) / `mcp` (Python). |
 
 Legend: ✅ first-class, ⚠️ via adapter or shim.
 
@@ -39,8 +39,8 @@ The examples reuse these placeholders — substitute with your own paths and sec
 |---|---|
 | `${MCP_DIR}` | Absolute path to the cloned repo (e.g. `/Users/you/synology-office-mcp`). |
 | `${ENV_FILE}` | Absolute path to your populated `.env`. |
-| `${MCP_URL}` | SSE endpoint, e.g. `https://mcp.your-nas.local:3443/sse`. |
-| `${MCP_TOKEN}` | Value of `MCP_AUTH_TOKEN` (required for non-loopback SSE). |
+| `${MCP_URL}` | Streamable HTTP endpoint, e.g. `https://mcp.your-nas.local:3443/mcp`. |
+| `${MCP_TOKEN}` | Value of `MCP_AUTH_TOKEN` (required for Streamable HTTP). |
 
 stdio launchers always set the working directory to `${MCP_DIR}` so the server can resolve relative paths.
 
@@ -62,10 +62,10 @@ Claude Code reads the host's environment, so `SYNO_*` vars from your shell pass 
 claude mcp add synology --env-file ${ENV_FILE} -- node ${MCP_DIR}/dist/index.js
 ```
 
-**SSE:**
+**Streamable HTTP:**
 
 ```bash
-claude mcp add --transport sse synology ${MCP_URL} \
+claude mcp add --transport http synology ${MCP_URL} \
   --header "Authorization: Bearer ${MCP_TOKEN}"
 ```
 
@@ -143,7 +143,7 @@ Restart Claude Desktop. The hammer icon should list all 32 Synology tools.
 }
 ```
 
-For SSE:
+For Streamable HTTP:
 
 ```jsonc
 {
@@ -180,7 +180,7 @@ Add to `~/.continue/config.json` under `experimental.modelContextProtocolServers
 }
 ```
 
-For SSE, swap `transport.type` to `"sse"` and provide `url` + `headers`.
+For Streamable HTTP, use your client version's HTTP/URL transport setting and provide `url` + `headers`.
 
 **Remove MCP:** Delete the synology entry from `experimental.modelContextProtocolServers` in `~/.continue/config.json` and restart Continue.
 
@@ -223,7 +223,7 @@ SYNO_USERNAME = "your_user"
 SYNO_PASSWORD = "your_pass"
 ```
 
-Run `codex` and the tools appear under the Synology server. SSE is not yet supported in Codex CLI — tunnel via stdio or wrap with [`mcp-remote`](https://github.com/geelen/mcp-remote):
+Run `codex` and the tools appear under the Synology server. For remote HTTP setups, use a client/bridge that supports Streamable HTTP:
 
 ```toml
 [mcp_servers.synology]
@@ -251,7 +251,7 @@ Antigravity (Google's agentic IDE) reads MCP servers from **Workspace Settings �
 }
 ```
 
-For remote SSE setups, use the same `url` + `headers` shape as Cursor.
+For remote Streamable HTTP setups, use the same `url` + `headers` shape as Cursor when supported by the client.
 
 **Remove MCP:** Remove the `synology` entry under **Workspace Settings → MCP**, or delete it from `~/.antigravity/mcp.json`. Reload the workspace.
 
@@ -313,9 +313,9 @@ asyncio.run(list_tools())
 
 Wire `session.call_tool(name, arguments)` into your BabyAGI task executor: each MCP tool becomes one "skill" the planner can dispatch.
 
-**SSE variant:** swap `stdio_client` for `mcp.client.sse.sse_client(url, headers={...})`.
+**Streamable HTTP variant:** swap `stdio_client` for the official SDK Streamable HTTP client transport and pass `url` + `headers`.
 
-**Remove MCP:** Drop the `StdioServerParameters` / `sse_client` block and any `session.call_tool(...)` references from your task executor. Closing the `async with` context terminates the subprocess; no persisted config to clean up.
+**Remove MCP:** Drop the `StdioServerParameters` / HTTP client block and any `session.call_tool(...)` references from your task executor. Closing the client context terminates the subprocess or HTTP session; no persisted config to clean up.
 
 ---
 
@@ -340,7 +340,7 @@ tools = await client.get_tools()        # LangChain Tool objects
 agent = create_react_agent(llm, tools)  # langgraph.prebuilt
 ```
 
-For SSE, replace the entry with `{"transport": "sse", "url": "${MCP_URL}", "headers": {...}}`.
+For Streamable HTTP, replace the entry with the adapter's HTTP transport shape, using `"url": "${MCP_URL}"` and `headers`.
 
 **Remove MCP:** Remove the `"synology"` key from the `MultiServerMCPClient({...})` dict and rebuild the agent without those tools. Optionally `pip uninstall langchain-mcp-adapters` if no other servers remain.
 
@@ -370,7 +370,7 @@ agent = FunctionAgent(tools=await spec.to_tool_list_async(), llm=llm)
 
 For any other agent framework, both official SDKs work:
 
-- **TypeScript:** [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) — `Client` + `StdioClientTransport` / `SSEClientTransport`.
+- **TypeScript:** [`@modelcontextprotocol/sdk`](https://github.com/modelcontextprotocol/typescript-sdk) — `Client` + `StdioClientTransport` / `StreamableHTTPClientTransport`.
 - **Python:** [`mcp`](https://github.com/modelcontextprotocol/python-sdk) — see BabyAGI snippet above.
 - **Go:** [`mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go).
 - **Rust:** [`modelcontextprotocol/rust-sdk`](https://github.com/modelcontextprotocol/rust-sdk).
@@ -382,7 +382,7 @@ Tool discovery flow is identical across SDKs:
 3. `list_tools()` — pull tool schemas; feed them to the LLM as function declarations.
 4. `call_tool(name, args)` — invoke; return the result to the model.
 
-**Remove MCP:** Close the transport (`transport.close()` / `await session.__aexit__(...)`), drop the Synology tool schemas from the LLM's function declarations, and remove any client init code. For SSE clients, also revoke `${MCP_TOKEN}` server-side if the integration is permanently retired.
+**Remove MCP:** Close the transport (`transport.close()` / `await session.__aexit__(...)`), drop the Synology tool schemas from the LLM's function declarations, and remove any client init code. For Streamable HTTP clients, also revoke `${MCP_TOKEN}` server-side if the integration is permanently retired.
 
 ---
 
@@ -391,11 +391,11 @@ Tool discovery flow is identical across SDKs:
 | Threat | Mitigation |
 |---|---|
 | Token leakage | Never commit `${MCP_TOKEN}` to client config repos; load from OS keychain or env. |
-| Replay over HTTP | Always front SSE with HTTPS (DSM Reverse Proxy, Cloudflare Tunnel, Tailscale). |
+| Replay over HTTP | Always front Streamable HTTP with HTTPS (DSM Reverse Proxy, Cloudflare Tunnel, Tailscale). |
 | Over-privileged DSM user | Create a **dedicated DSM service account** with only the modules/folders the agent needs. |
 | Auto-block triggers | Whitelist the MCP host's IP in DSM → Security → Auto Block. |
 | Stolen `.env` on shared workstation | `chmod 600 .env`; prefer Docker `--env-file` only when the file is user-owned. |
-| 2FA accounts | Use a DSM **app-specific password**; do not embed `SYNO_OTP_CODE` in long-lived configs. |
+| 2FA accounts | Use a dedicated DSM service account without 2FA for unattended Spreadsheet automation; do not embed `SYNO_OTP_CODE` in long-lived configs. |
 
 ---
 
@@ -405,7 +405,7 @@ Tool discovery flow is identical across SDKs:
 |---|---|---|
 | Client says "MCP server failed to start" | Wrong absolute path or missing build | `pnpm build` then re-check `command`/`args`. |
 | Tools list is empty | Server failed to register tools | Check stderr for config validation errors; verify `pnpm build` produced `dist/index.js`. |
-| `401 Unauthorized` on SSE | Missing/incorrect `MCP_AUTH_TOKEN` header | Verify the `Authorization: Bearer …` header reaches the server (DSM Reverse Proxy may strip it — add a custom header rule). |
+| `401 Unauthorized` on Streamable HTTP | Missing/incorrect `MCP_AUTH_TOKEN` header | Verify the `Authorization: Bearer …` header reaches the server (DSM Reverse Proxy may strip it — add a custom header rule). |
 | Client connects but tool calls hang | NAS unreachable from server host | `curl -k https://${SYNO_HOST}:${SYNO_PORT}` from where the MCP server runs. |
 | Self-signed cert errors | NAS uses default DSM cert | `SYNO_IGNORE_CERT=true` (trusted networks only). |
 | Works locally, fails in agent | Different working directory | Set `cwd` to `${MCP_DIR}` in the client config, or use absolute `args`. |

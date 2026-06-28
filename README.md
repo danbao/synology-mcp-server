@@ -44,14 +44,14 @@ Wraps the official [Synology Office Suite REST API](https://office-suite-api.syn
 | **Spreadsheet** | 13 | List / register-by-name / get info / read sheet / get styles / write cells / append rows / batch update / add-rename-delete sheet / create / export |
 | **MailPlus** | 6 | List folders / list messages / get message / send / move / mark read-unread |
 | **Calendar** | 7 | List calendars / list events / get event / create calendar / create event / update event / delete event |
-| **MCP Layer** | — | Resources (file tree, mail folders, calendar list), prompts, stdio + SSE transports |
+| **MCP Layer** | — | Resources (file tree, mail folders, calendar list), prompts, stdio + Streamable HTTP transports |
 | **Security** | — | TLS verify, path-guard, origin-guard, bearer-auth, log redaction, confirm-required writes |
 
 Modules **not** included (no public API yet): Synology Docs, Synology Slides.
 
 ### Design principles
 
-- **Self-hosted, LAN-only by default** — TLS verification on, SSE bound to `127.0.0.1` unless `MCP_AUTH_TOKEN` is set
+- **Self-hosted, LAN-ready** — TLS verification on, Streamable HTTP requires a Bearer token
 - **No third-party MCP middlemen** — every Synology call goes through the official REST API
 - **Read-heavy, safe writes** — destructive operations require an explicit `confirm: true` parameter
 - **Stateless tool calls** — each MCP invocation is independent; session/token lifecycle is internal
@@ -173,7 +173,7 @@ All configuration is via environment variables, validated by [Zod](https://zod.d
 |---|---|
 | `SYNO_HOST` | NAS hostname or IP (`192.168.1.100` or `nas.local`) |
 | `SYNO_USERNAME` | DSM account username |
-| `SYNO_PASSWORD` | DSM account password (use an app-specific password if 2FA is enabled) |
+| `SYNO_PASSWORD` | DSM account password (use a dedicated low-privilege service account) |
 
 ### Common optional
 
@@ -182,11 +182,12 @@ All configuration is via environment variables, validated by [Zod](https://zod.d
 | `SYNO_PORT` | `5001` | DSM port (`5000` HTTP, `5001` HTTPS) |
 | `SYNO_HTTPS` | `true` | Use HTTPS |
 | `SYNO_IGNORE_CERT` | `false` | Accept self-signed cert (trusted home NAS only) |
-| `SYNO_OTP_CODE` | — | 2FA TOTP code (prefer app-specific passwords instead) |
-| `MCP_TRANSPORT` | `stdio` | `stdio` or `sse` |
-| `MCP_SSE_HOST` | `127.0.0.1` | Bind address for SSE |
-| `MCP_SSE_PORT` | `3100` | Port for SSE |
-| `MCP_AUTH_TOKEN` | — | **Required** when `MCP_SSE_HOST` is non-loopback |
+| `SYNO_OTP_CODE` | — | 2FA TOTP code (Spreadsheet API does not accept OTP; prefer a dedicated service account without 2FA) |
+| `MCP_TRANSPORT` | `stdio` | `stdio` or `streamable-http` |
+| `MCP_HTTP_HOST` | `127.0.0.1` | Bind address for Streamable HTTP |
+| `MCP_HTTP_PORT` | `3100` | Port for Streamable HTTP |
+| `MCP_HTTP_PATH` | `/mcp` | Streamable HTTP endpoint path |
+| `MCP_AUTH_TOKEN` | — | **Required** when `MCP_TRANSPORT=streamable-http` |
 | `LOG_LEVEL` | `info` | `debug` \| `info` \| `warn` \| `error` |
 
 > **Warning:** `SYNO_IGNORE_CERT=true` disables MITM protection. Only use it on trusted home networks with self-signed certs you control.
@@ -262,7 +263,7 @@ See [`examples/claude-code-add.sh`](./examples/claude-code-add.sh) for the full 
 
 ### GoClaw
 
-See [`examples/goclaw-mcp.json`](./examples/goclaw-mcp.json). Start the server in SSE mode first (see [Transport Modes](#transport-modes)).
+See [`examples/goclaw-mcp.json`](./examples/goclaw-mcp.json). Start the server in Streamable HTTP mode first (see [Transport Modes](#transport-modes)).
 
 ---
 
@@ -277,21 +278,22 @@ node dist/index.js
 # or: MCP_TRANSPORT=stdio node dist/index.js
 ```
 
-### SSE (Server-Sent Events)
+### Streamable HTTP
 
-Used for multi-client setups and GoClaw integration.
+Used for Docker/LAN deployments and multi-client integrations.
 
 ```bash
-MCP_TRANSPORT=sse \
-MCP_SSE_HOST=127.0.0.1 \
-MCP_SSE_PORT=3100 \
+MCP_TRANSPORT=streamable-http \
+MCP_HTTP_HOST=0.0.0.0 \
+MCP_HTTP_PORT=3100 \
+MCP_HTTP_PATH=/mcp \
 MCP_AUTH_TOKEN="$(openssl rand -hex 32)" \
 node dist/index.js
 ```
 
-Clients connect to `http://<host>:3100/sse` with `Authorization: Bearer <token>`.
+Clients connect to `http://<host>:3100/mcp` with `Authorization: Bearer <token>`.
 
-> **Security:** The server refuses to start when SSE is bound to a non-loopback address without `MCP_AUTH_TOKEN`. See [`security-model.md`](./security-model.md).
+> **Security:** The server refuses to start in Streamable HTTP mode without `MCP_AUTH_TOKEN`. See [`security-model.md`](./security-model.md).
 
 ---
 
@@ -301,7 +303,7 @@ Clients connect to `http://<host>:3100/sse` with `Authorization: Bearer <token>`
 ┌─────────────────────────────────────────────────┐
 │        MCP Client (Claude / GoClaw / …)          │
 └──────────────────────┬──────────────────────────┘
-                       │ MCP (JSON-RPC 2.0, stdio | SSE)
+                       │ MCP (JSON-RPC 2.0, stdio | Streamable HTTP)
 ┌──────────────────────▼──────────────────────────┐
 │            synology-office-mcp                   │
 │                                                  │
@@ -326,7 +328,7 @@ See [`integration-guide.md`](./integration-guide.md) for client wiring across MC
 
 - **TLS verification on by default.** `SYNO_IGNORE_CERT=true` is opt-in and logged at startup.
 - **Credentials never appear in URLs.** Login uses `POST` with form body; session id (`sid`) forwarded via `Cookie: id=…`.
-- **SSE binds loopback by default.** Server refuses to start when SSE is bound to non-loopback without `MCP_AUTH_TOKEN`.
+- **Streamable HTTP requires Bearer auth.** Server refuses to start in HTTP mode without `MCP_AUTH_TOKEN`.
 - **Sensitive values are redacted in logs** via `src/utils/redact.ts`.
 - **Path traversal is blocked** at tool boundary by `src/utils/path-guard.ts`.
 - **Destructive operations require `confirm: true`** in the tool input.
