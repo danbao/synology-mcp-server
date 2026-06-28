@@ -395,7 +395,7 @@ Tool discovery flow is identical across SDKs:
 | Over-privileged DSM user | Create a **dedicated DSM service account** with only the modules/folders the agent needs. |
 | Auto-block triggers | Whitelist the MCP host's IP in DSM → Security → Auto Block. |
 | Stolen `.env` on shared workstation | `chmod 600 .env`; prefer Docker `--env-file` only when the file is user-owned. |
-| 2FA accounts | Use a dedicated DSM service account without 2FA for unattended Spreadsheet automation; do not embed `SYNO_OTP_CODE` in long-lived configs. |
+| 2FA accounts | DSM session login can use `SYNO_OTP_SECRET`, but Spreadsheet automation still needs a dedicated DSM service account without 2FA; keep OTP seeds out of committed configs. |
 
 ---
 

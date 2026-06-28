@@ -32,7 +32,7 @@
 
 ## Credential Handling
 
-- Credentials (`SYNO_PASSWORD`, `SYNO_OTP_CODE`) are read from environment variables at startup and never written to disk by this server
+- Credentials (`SYNO_PASSWORD`, `SYNO_OTP_CODE`, `SYNO_OTP_SECRET`) are read from environment variables at startup and never written to disk by this server
 - Login uses `POST` with an `application/x-www-form-urlencoded` body — credentials never appear in URLs or access logs
 - The session ID (`sid`) is forwarded via `Cookie: id=<sid>` header, keeping it out of URL query strings and server access logs
 - `redactSensitive()` strips `passwd`, `_sid`, `otp_code`, and bearer token values from any object before it is logged
@@ -66,7 +66,9 @@ openssl rand -hex 32
 
 For unattended MCP use, create a dedicated low-privilege DSM service account.
 
-If 2FA is enabled on the DSM account, `SYNO_OTP_CODE` can only help the DSM session login path and expires quickly. The Spreadsheet `/spreadsheets/authorize` endpoint does not accept OTP, so Spreadsheet automation should use a dedicated service account without 2FA enabled.
+If 2FA is enabled on the DSM account, DSM session login can use either a short-lived `SYNO_OTP_CODE` or `SYNO_OTP_SECRET` to generate TOTP codes automatically. `SYNO_OTP_SECRET` is equivalent to the authenticator seed, so store it as a secret and never commit it.
+
+The Spreadsheet `/spreadsheets/authorize` endpoint does not accept OTP, so Spreadsheet automation should use a dedicated service account without 2FA enabled.
 
 ---
 
@@ -89,9 +91,10 @@ The following values are automatically redacted (replaced with `[REDACTED]`) bef
 
 - `passwd` / `password` fields
 - `_sid` / `sid` session identifiers
-- `otp_code` values
+- `otp_code` / `otp_secret` values
 - `Authorization` bearer token values
 - `MCP_AUTH_TOKEN` value
+- `SYNO_OTP_SECRET` value
 
 Redaction is applied by `src/utils/redact.ts` and is called at every log site. If you find a log statement that leaks a sensitive value, please report it per the [vulnerability disclosure process](./SECURITY.md).
 

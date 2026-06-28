@@ -107,6 +107,12 @@ interface SynoApiInfoResult {
   [apiName: string]: { path: string; minVersion: number; maxVersion: number };
 }
 
+/** SYNO.API.Info response envelope used by the anonymous availability probe. */
+interface SynoApiInfoEnvelope {
+  success: boolean;
+  data?: SynoApiInfoResult;
+}
+
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
@@ -118,9 +124,11 @@ interface SynoApiInfoResult {
 export class MailPlusClient extends BaseClient {
   /** Cached availability result; undefined means not yet checked. */
   private _available: boolean | undefined = undefined;
+  private readonly availabilityTimeoutMs: number;
 
   constructor(config: SynologyConfig, authManager: AuthManager) {
     super(config, authManager);
+    this.availabilityTimeoutMs = config.requestTimeoutMs;
   }
 
   /**
@@ -131,17 +139,25 @@ export class MailPlusClient extends BaseClient {
     if (this._available !== undefined) return this._available;
 
     try {
-      const result = await this.request<SynoApiInfoResult>({
-        endpoint: ENTRY,
-        method: 'GET',
-        params: {
-          api: 'SYNO.API.Info',
-          version: 1,
-          method: 'query',
-          query: 'SYNO.MailClient.Mailbox',
-        },
+      const qs = new URLSearchParams({
+        api: 'SYNO.API.Info',
+        version: '1',
+        method: 'query',
+        query: 'SYNO.MailClient.Mailbox',
       });
-      this._available = 'SYNO.MailClient.Mailbox' in result;
+      const response = await httpFetch(
+        `${this.baseUrl}${ENTRY}?${qs.toString()}`,
+        {
+          method: 'GET',
+          signal: AbortSignal.timeout(this.availabilityTimeoutMs),
+        },
+        this.dispatcher,
+      );
+      const result = (await response.json()) as SynoApiInfoEnvelope;
+      this._available =
+        result.success === true &&
+        result.data !== undefined &&
+        'SYNO.MailClient.Mailbox' in result.data;
     } catch {
       this._available = false;
     }

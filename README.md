@@ -137,6 +137,8 @@ export SYNO_HTTPS=true                 # Use HTTPS for MCP → DSM
 export SYNO_IGNORE_CERT=false          # true ONLY for trusted self-signed cert
 export SYNO_USERNAME=your_nas_user
 export SYNO_PASSWORD=your_nas_password
+# Optional for DSM 2FA login only. Prefer a dedicated non-2FA service account.
+export SYNO_OTP_SECRET=base32_totp_seed_from_authenticator
 
 # ---- Spreadsheet API container (required if Spreadsheet module enabled) ----
 export SYNO_SS_HOST=192.168.1.100      # Host running synology/spreadsheet-api
@@ -151,7 +153,7 @@ export SYNO_SS_DSM_PORT=5000           # Use DSM HTTP port to bypass cert issues
 export SYNO_SS_DSM_HTTPS=false         # false → skip TLS verify on back-call
 ```
 
-> **2FA accounts:** the Spreadsheet `/authorize` endpoint does **not** accept OTP. Create a dedicated DSM service account **without** 2FA for unattended automation. Leave `SYNO_OTP_CODE` empty.
+> **2FA accounts:** DSM session login can use `SYNO_OTP_CODE` or generate codes from `SYNO_OTP_SECRET`, but the Spreadsheet `/authorize` endpoint does **not** accept OTP. Prefer a dedicated DSM service account **without** 2FA for unattended automation.
 
 ### 3. Run the MCP server
 
@@ -186,7 +188,8 @@ All configuration is via environment variables, validated by [Zod](https://zod.d
 | `SYNO_PORT` | `5001` | DSM port (`5000` HTTP, `5001` HTTPS) |
 | `SYNO_HTTPS` | `true` | Use HTTPS |
 | `SYNO_IGNORE_CERT` | `false` | Accept self-signed cert (trusted home NAS only) |
-| `SYNO_OTP_CODE` | — | 2FA TOTP code (Spreadsheet API does not accept OTP; prefer a dedicated service account without 2FA) |
+| `SYNO_OTP_CODE` | — | Short-lived manual 2FA TOTP code; takes priority over `SYNO_OTP_SECRET` |
+| `SYNO_OTP_SECRET` | — | Base32 TOTP seed used to generate DSM login codes automatically; store as a secret |
 | `MCP_TRANSPORT` | `stdio` | `stdio` or `streamable-http` |
 | `MCP_HTTP_HOST` | `127.0.0.1` | Bind address for Streamable HTTP |
 | `MCP_HTTP_PORT` | `3100` | Port for Streamable HTTP |
@@ -333,7 +336,7 @@ See [`integration-guide.md`](./integration-guide.md) for client wiring across MC
 - **TLS verification on by default.** `SYNO_IGNORE_CERT=true` is opt-in and logged at startup.
 - **Credentials never appear in URLs.** Login uses `POST` with form body; session id (`sid`) forwarded via `Cookie: id=…`.
 - **Streamable HTTP requires Bearer auth.** Server refuses to start in HTTP mode without `MCP_AUTH_TOKEN`.
-- **Sensitive values are redacted in logs** via `src/utils/redact.ts`.
+- **Sensitive values are redacted in logs** via `src/utils/redact.ts`, including DSM password, OTP code/secret, session IDs, and Bearer tokens.
 - **Path traversal is blocked** at tool boundary by `src/utils/path-guard.ts`.
 - **Destructive operations require `confirm: true`** in the tool input.
 

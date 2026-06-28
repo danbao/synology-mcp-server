@@ -19,6 +19,8 @@ export interface SynologyConfig {
   password: string;
   /** Optional OTP code for 2FA accounts */
   otpCode?: string;
+  /** Optional Base32 TOTP secret used to generate DSM 2FA codes */
+  otpSecret?: string;
   /** Session token TTL in milliseconds (default 23h = 82800000) */
   tokenTtlMs: number;
   /** HTTP request timeout in milliseconds (default 30000) */
