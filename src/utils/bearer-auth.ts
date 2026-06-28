@@ -1,11 +1,11 @@
 /**
- * Bearer-token authentication for the MCP SSE / Streamable-HTTP transport.
+ * Bearer-token authentication for the MCP Streamable HTTP transport.
  *
  * MCP spec (2025-06-18) requires "proper authentication for all connections".
  * This helper performs a constant-time comparison of the Authorization header
  * against the configured shared secret to prevent timing-side-channel attacks.
  *
- * Wire into the SSE server's request handler before any JSON-RPC dispatch.
+ * Wire into the HTTP server's request handler before any JSON-RPC dispatch.
  */
 
 import { timingSafeEqual } from 'node:crypto';

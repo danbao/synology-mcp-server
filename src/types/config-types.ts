@@ -49,13 +49,15 @@ export interface SynologyConfig {
 
 /** MCP server transport configuration */
 export interface McpConfig {
-  /** Transport mode: stdio for CLI, sse for multi-client */
-  transport: 'stdio' | 'sse';
-  /** SSE server port, only used when transport=sse */
-  ssePort: number;
-  /** SSE bind host, defaults to 127.0.0.1 */
-  sseHost: string;
-  /** Optional shared secret for SSE mode authentication */
+  /** Transport mode: stdio for CLI, streamable-http for network clients */
+  transport: 'stdio' | 'streamable-http';
+  /** HTTP server port, only used when transport=streamable-http */
+  httpPort: number;
+  /** HTTP bind host, defaults to 127.0.0.1 */
+  httpHost: string;
+  /** MCP endpoint path, defaults to /mcp */
+  httpPath: string;
+  /** Required shared secret for Streamable HTTP mode */
   authToken?: string;
 }
 

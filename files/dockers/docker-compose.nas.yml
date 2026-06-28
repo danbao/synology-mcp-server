@@ -4,6 +4,7 @@
 #
 # network_mode: host so 127.0.0.1 inside the container = DSM loopback,
 # letting the MCP server hit DSM APIs without LAN round-trips.
+# Set MCP_AUTH_TOKEN in the .env file; Streamable HTTP refuses to start without it.
 
 services:
   synology-mcp:
@@ -11,7 +12,14 @@ services:
     container_name: synology-office-mcp
     restart: unless-stopped
     network_mode: host
-    env_file: /volume1/docker/synology-office-mcp/.env
+    env_file:
+      - path: /volume1/docker/synology-office-mcp/.env
+        required: false
+    environment:
+      MCP_TRANSPORT: streamable-http
+      MCP_HTTP_HOST: 0.0.0.0
+      MCP_HTTP_PORT: 3100
+      MCP_HTTP_PATH: /mcp
     logging:
       driver: json-file
       options:

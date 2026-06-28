@@ -1,11 +1,11 @@
 /**
- * Origin header validator for MCP SSE / Streamable-HTTP transport.
+ * Origin header validator for MCP Streamable HTTP transport.
  *
  * MCP spec (2025-06-18, Streamable HTTP §Security Warning):
  *   Servers MUST validate the `Origin` header on all incoming connections
  *   to prevent DNS rebinding attacks.
  *
- * Wire this into the SSE server before any JSON-RPC handler runs.
+ * Wire this into the HTTP server before any JSON-RPC handler runs.
  */
 
 /**
@@ -19,7 +19,7 @@
  *
  * @param origin - Value of the incoming `Origin` header (or null/undefined).
  * @param allowedOrigins - Exact origin strings permitted, e.g. ["http://127.0.0.1:3100"].
- * @param boundHost - Host the SSE server is bound to (used to allow no-Origin on loopback).
+ * @param boundHost - Host the HTTP server is bound to (used to allow no-Origin on loopback).
  */
 export function isOriginAllowed(
   origin: string | null | undefined,

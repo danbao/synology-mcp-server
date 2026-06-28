@@ -55,8 +55,9 @@ describe('loadConfig', () => {
     'SYNO_ENABLE_MAILPLUS',
     'SYNO_ENABLE_CALENDAR',
     'MCP_TRANSPORT',
-    'MCP_SSE_PORT',
-    'MCP_SSE_HOST',
+    'MCP_HTTP_PORT',
+    'MCP_HTTP_HOST',
+    'MCP_HTTP_PATH',
     'MCP_AUTH_TOKEN',
     'LOG_LEVEL',
     'LOG_FILE',
@@ -134,19 +135,24 @@ describe('loadConfig', () => {
       const cfg = loadConfig();
       expect(cfg.synology.tokenTtlMs).toBe(82_800_000);
       expect(cfg.synology.requestTimeoutMs).toBe(30_000);
-      expect(cfg.mcp.ssePort).toBe(3100);
-      expect(cfg.mcp.sseHost).toBe('127.0.0.1');
+      expect(cfg.mcp.httpPort).toBe(3100);
+      expect(cfg.mcp.httpHost).toBe('127.0.0.1');
+      expect(cfg.mcp.httpPath).toBe('/mcp');
     } finally {
       restore();
     }
   });
 
-  it('respects MCP_TRANSPORT=sse override', async () => {
-    const restore = withEnv({ ...VALID_ENV, MCP_TRANSPORT: 'sse' });
+  it('respects MCP_TRANSPORT=streamable-http override when auth token is set', async () => {
+    const restore = withEnv({
+      ...VALID_ENV,
+      MCP_TRANSPORT: 'streamable-http',
+      MCP_AUTH_TOKEN: 'strong-shared-secret',
+    });
     try {
-      const { loadConfig } = await import('../src/config.js?v=sse');
+      const { loadConfig } = await import('../src/config.js?v=streamable-http');
       const cfg = loadConfig();
-      expect(cfg.mcp.transport).toBe('sse');
+      expect(cfg.mcp.transport).toBe('streamable-http');
     } finally {
       restore();
     }
@@ -165,47 +171,48 @@ describe('loadConfig', () => {
     }
   });
 
-  it('rejects SSE on non-loopback host without MCP_AUTH_TOKEN', async () => {
+  it('rejects Streamable HTTP without MCP_AUTH_TOKEN', async () => {
     const restore = withEnv({
       ...VALID_ENV,
-      MCP_TRANSPORT: 'sse',
-      MCP_SSE_HOST: '0.0.0.0',
+      MCP_TRANSPORT: 'streamable-http',
     });
     try {
-      const { loadConfig } = await import('../src/config.js?v=sse-no-token');
+      const { loadConfig } = await import('../src/config.js?v=http-no-token');
       expect(() => loadConfig()).toThrow(ValidationError);
     } finally {
       restore();
     }
   });
 
-  it('allows SSE on non-loopback host when MCP_AUTH_TOKEN is set', async () => {
+  it('allows Streamable HTTP when MCP_AUTH_TOKEN is set', async () => {
     const restore = withEnv({
       ...VALID_ENV,
-      MCP_TRANSPORT: 'sse',
-      MCP_SSE_HOST: '0.0.0.0',
+      MCP_TRANSPORT: 'streamable-http',
+      MCP_HTTP_HOST: '0.0.0.0',
+      MCP_HTTP_PORT: '3101',
+      MCP_HTTP_PATH: 'custom-mcp',
       MCP_AUTH_TOKEN: 'strong-shared-secret',
     });
     try {
-      const { loadConfig } = await import('../src/config.js?v=sse-with-token');
+      const { loadConfig } = await import('../src/config.js?v=http-with-token');
       const cfg = loadConfig();
-      expect(cfg.mcp.sseHost).toBe('0.0.0.0');
+      expect(cfg.mcp.httpHost).toBe('0.0.0.0');
+      expect(cfg.mcp.httpPort).toBe(3101);
+      expect(cfg.mcp.httpPath).toBe('/custom-mcp');
       expect(cfg.mcp.authToken).toBe('strong-shared-secret');
     } finally {
       restore();
     }
   });
 
-  it('allows SSE on loopback host without MCP_AUTH_TOKEN', async () => {
+  it('rejects legacy MCP_TRANSPORT=sse with migration guidance', async () => {
     const restore = withEnv({
       ...VALID_ENV,
       MCP_TRANSPORT: 'sse',
-      MCP_SSE_HOST: '127.0.0.1',
     });
     try {
-      const { loadConfig } = await import('../src/config.js?v=sse-loopback');
-      const cfg = loadConfig();
-      expect(cfg.mcp.transport).toBe('sse');
+      const { loadConfig } = await import('../src/config.js?v=sse-rejected');
+      expect(() => loadConfig()).toThrow(/streamable-http/);
     } finally {
       restore();
     }

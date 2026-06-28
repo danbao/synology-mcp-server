@@ -70,16 +70,17 @@ This disables TLS verification for the NAS connection. Only safe on a trusted LA
 
 ---
 
-## SSE Server Won't Start
+## Streamable HTTP Server Won't Start
 
-**Symptom:** `Error: MCP_AUTH_TOKEN is required when MCP_SSE_HOST is not loopback`
+**Symptom:** `MCP_AUTH_TOKEN is required when MCP_TRANSPORT=streamable-http`
 
-**Fix:** When binding SSE to `0.0.0.0` or any non-loopback address, set `MCP_AUTH_TOKEN`:
+**Fix:** Streamable HTTP always requires `MCP_AUTH_TOKEN`:
 
 ```bash
-MCP_TRANSPORT=sse \
-MCP_SSE_HOST=0.0.0.0 \
-MCP_SSE_PORT=3100 \
+MCP_TRANSPORT=streamable-http \
+MCP_HTTP_HOST=0.0.0.0 \
+MCP_HTTP_PORT=3100 \
+MCP_HTTP_PATH=/mcp \
 MCP_AUTH_TOKEN="$(openssl rand -hex 32)" \
 node dist/index.js
 ```

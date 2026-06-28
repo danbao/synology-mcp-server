@@ -100,17 +100,30 @@ const AppConfigSchema = z.object({
   MCP_TRANSPORT: z
     .string()
     .optional()
-    .transform((v): 'stdio' | 'sse' => {
+    .transform((v): 'stdio' | 'streamable-http' => {
       if (v === undefined || v === '') return 'stdio';
-      if (v === 'stdio' || v === 'sse') return v;
-      throw new Error(`MCP_TRANSPORT must be 'stdio' or 'sse', got '${v}'`);
+      if (v === 'stdio' || v === 'streamable-http') return v;
+      if (v === 'sse') {
+        throw new Error(
+          "MCP_TRANSPORT=sse is no longer supported; use 'streamable-http' with MCP_HTTP_* settings",
+        );
+      }
+      throw new Error(`MCP_TRANSPORT must be 'stdio' or 'streamable-http', got '${v}'`);
     }),
-  MCP_SSE_PORT: envInt(3100),
-  MCP_SSE_HOST: z
+  MCP_HTTP_PORT: envInt(3100),
+  MCP_HTTP_HOST: z
     .string()
     .trim()
     .optional()
     .transform((v) => (v === undefined || v === '' ? '127.0.0.1' : v)),
+  MCP_HTTP_PATH: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => {
+      if (v === undefined || v === '') return '/mcp';
+      return v.startsWith('/') ? v : `/${v}`;
+    }),
   MCP_AUTH_TOKEN: z.string().optional(),
 
   // Logging
@@ -124,17 +137,6 @@ const AppConfigSchema = z.object({
     }),
   LOG_FILE: z.string().optional(),
 });
-
-/**
- * Returns true when `host` resolves to a loopback bind: IPv4 127.0.0.0/8,
- * IPv6 ::1, or the literal "localhost". Used to gate SSE auth requirement.
- */
-function isLoopbackHost(host: string): boolean {
-  const h = host.trim().toLowerCase();
-  if (h === 'localhost' || h === '::1' || h === '[::1]') return true;
-  // IPv4 loopback range 127.0.0.0/8
-  return /^127(\.\d{1,3}){3}$/.test(h);
-}
 
 // ---------------------------------------------------------------------------
 // Loader
@@ -157,13 +159,13 @@ export function loadConfig(): AppConfig {
 
   const env = result.data;
 
-  // SSE bound to non-loopback without an auth token = unauthenticated proxy
-  // to the NAS session. Reject at startup per MCP spec security guidance.
-  if (env.MCP_TRANSPORT === 'sse' && !isLoopbackHost(env.MCP_SSE_HOST) && !env.MCP_AUTH_TOKEN) {
+  // Streamable HTTP is a network proxy to the NAS session. Require an explicit
+  // shared secret even on loopback so Docker/LAN deployments do not drift open.
+  if (env.MCP_TRANSPORT === 'streamable-http' && !env.MCP_AUTH_TOKEN) {
     throw new ValidationError(
-      'SSE_AUTH_REQUIRED',
-      `MCP_AUTH_TOKEN is required when MCP_SSE_HOST is not a loopback address (got '${env.MCP_SSE_HOST}'). ` +
-        'Either set MCP_AUTH_TOKEN to a strong shared secret or bind to 127.0.0.1.',
+      'HTTP_AUTH_REQUIRED',
+      'MCP_AUTH_TOKEN is required when MCP_TRANSPORT=streamable-http. ' +
+        'Generate a strong shared secret, e.g. `openssl rand -hex 32`.',
     );
   }
 
@@ -202,8 +204,9 @@ export function loadConfig(): AppConfig {
     },
     mcp: {
       transport: env.MCP_TRANSPORT,
-      ssePort: env.MCP_SSE_PORT,
-      sseHost: env.MCP_SSE_HOST,
+      httpPort: env.MCP_HTTP_PORT,
+      httpHost: env.MCP_HTTP_HOST,
+      httpPath: env.MCP_HTTP_PATH,
       ...(env.MCP_AUTH_TOKEN ? { authToken: env.MCP_AUTH_TOKEN } : {}),
     },
     features: {
