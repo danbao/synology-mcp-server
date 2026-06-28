@@ -61,6 +61,8 @@ describe('MailPlusClient.listMessages', () => {
     const result = await client.listMessages({ folder_path: 'INBOX' });
     expect(result.total).toBeGreaterThanOrEqual(0);
     expect(Array.isArray(result.messages)).toBe(true);
+    expect(result.messages[0]?.id).toBe('1001');
+    expect(result.messages[0]?.from.address).toBe('alice@example.com');
   });
 
   it('applies default options when none provided', async () => {
@@ -68,6 +70,20 @@ describe('MailPlusClient.listMessages', () => {
     const result = await client.listMessages({});
     expect(result).toHaveProperty('total');
     expect(result).toHaveProperty('messages');
+  });
+
+  it('resolves non-standard folder paths through the Mailbox API', async () => {
+    const client = createTestMailPlusClient();
+    const result = await client.listMessages({ folder_path: 'Projects' });
+    expect(result.total).toBe(1);
+    expect(result.messages[0]?.subject).toBe('Hello World');
+  });
+
+  it('throws a clear error for unknown folder paths', async () => {
+    const client = createTestMailPlusClient();
+    await expect(client.listMessages({ folder_path: 'Missing Folder' })).rejects.toMatchObject({
+      code: 'MAILBOX_NOT_FOUND',
+    });
   });
 });
 

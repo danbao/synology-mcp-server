@@ -37,6 +37,7 @@ describe('mailplus_list_messages', () => {
     // date should be ISO 8601
     expect(typeof messages[0]?.['date']).toBe('string');
     expect(messages[0]?.['date']).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(messages[0]?.['id']).toBe('1001');
   });
 
   it('maps sender/recipient address fields correctly', async () => {

@@ -52,6 +52,22 @@ describe('AuthManager.getToken', () => {
     expect(t1).toBe(t2);
   });
 
+  it('coalesces concurrent first-token requests into one login', async () => {
+    let loginCount = 0;
+    server.use(
+      http.post(AUTH_URL, async () => {
+        loginCount += 1;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return HttpResponse.json({ success: true, data: { sid: 'test-sid-123' } });
+      }),
+    );
+
+    const mgr = new AuthManager(BASE_CONFIG);
+    const tokens = await Promise.all([mgr.getToken(), mgr.getToken(), mgr.getToken()]);
+    expect(tokens).toEqual(['test-sid-123', 'test-sid-123', 'test-sid-123']);
+    expect(loginCount).toBe(1);
+  });
+
   it('throws AuthError on bad credentials', async () => {
     server.use(
       http.post(AUTH_URL, () => HttpResponse.json({ success: false, error: { code: 400 } })),

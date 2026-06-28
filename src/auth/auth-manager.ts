@@ -42,6 +42,7 @@ interface AuthResponse {
 export class AuthManager {
   private readonly cache: TokenCache;
   private readonly config: SynologyConfig;
+  private loginPromise: Promise<string> | undefined;
   /** Undici dispatcher — bypasses cert validation when ignoreCert=true */
   private readonly dispatcher: Agent | undefined;
 
@@ -70,7 +71,10 @@ export class AuthManager {
     if (cached !== null) {
       return cached;
     }
-    return this.login();
+    this.loginPromise ??= this.login().finally(() => {
+      this.loginPromise = undefined;
+    });
+    return this.loginPromise;
   }
 
   /**
