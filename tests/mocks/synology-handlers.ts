@@ -19,6 +19,92 @@ function synoError(code: number) {
   return HttpResponse.json({ success: false, error: { code } });
 }
 
+export interface MailplusRecordedRequest {
+  api: string | null;
+  version: string | null;
+  method: string | null;
+  source: 'query' | 'form' | 'multipart';
+  params: Record<string, string>;
+}
+
+export const mailplusRequestLog: MailplusRecordedRequest[] = [];
+
+export function clearMailplusRequestLog(): void {
+  mailplusRequestLog.length = 0;
+}
+
+interface RequestParams {
+  source: 'query' | 'form' | 'multipart';
+  get(name: string): string | null;
+  hasBodyParam(name: string): boolean;
+  toRecord(): Record<string, string>;
+}
+
+async function readPostParams(request: Request): Promise<RequestParams> {
+  const url = new URL(request.url);
+  const query = url.searchParams;
+  const contentType = request.headers.get('content-type') ?? '';
+  const body = new URLSearchParams();
+  let source: 'query' | 'form' | 'multipart' = 'query';
+
+  if (contentType.includes('application/x-www-form-urlencoded')) {
+    source = 'form';
+    const text = await request.text();
+    const parsed = new URLSearchParams(text);
+    for (const [key, value] of parsed.entries()) body.append(key, value);
+  } else if (contentType.includes('multipart/form-data')) {
+    source = 'multipart';
+    const form = await request.formData();
+    for (const [key, value] of form.entries()) {
+      body.append(key, typeof value === 'string' ? value : value.name);
+    }
+  }
+
+  return {
+    source,
+    get(name: string): string | null {
+      return body.get(name) ?? query.get(name);
+    },
+    hasBodyParam(name: string): boolean {
+      return body.has(name);
+    },
+    toRecord(): Record<string, string> {
+      const record: Record<string, string> = {};
+      for (const [key, value] of query.entries()) record[key] = value;
+      for (const [key, value] of body.entries()) record[key] = value;
+      return record;
+    },
+  };
+}
+
+function recordMailplusRequest(
+  params: RequestParams,
+  api: string | null,
+  method: string | null,
+): void {
+  if (api?.startsWith('SYNO.MailClient.') !== true) return;
+  mailplusRequestLog.push({
+    api,
+    version: params.get('version'),
+    method,
+    source: params.source,
+    params: params.toRecord(),
+  });
+}
+
+function recordMailplusGet(url: URL, api: string | null, method: string | null): void {
+  if (api?.startsWith('SYNO.MailClient.') !== true) return;
+  const params: Record<string, string> = {};
+  for (const [key, value] of url.searchParams.entries()) params[key] = value;
+  mailplusRequestLog.push({
+    api,
+    version: url.searchParams.get('version'),
+    method,
+    source: 'query',
+    params,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // MailPlus availability toggle (set false to simulate missing package)
 // ---------------------------------------------------------------------------
@@ -147,7 +233,15 @@ const MAIL_DETAIL_FIXTURE = {
     plain: 'Hello, this is the message body.',
     html: '<p>Hello, this is the message body.</p>',
   },
-  attachment: [{ id: 'att-001', name: 'file.txt', mime_type: 'text/plain', size: 100 }],
+  attachment: [
+    {
+      id: 'att-001',
+      name: 'file.txt',
+      mime_type: 'text/plain',
+      size: 100,
+      md5: 'mock-md5-001',
+    },
+  ],
 };
 
 // ---------------------------------------------------------------------------
@@ -190,6 +284,7 @@ function handleGet(request: Request): Response {
   const url = new URL(request.url);
   const api = url.searchParams.get('api');
   const method = url.searchParams.get('method');
+  recordMailplusGet(url, api, method);
 
   // --- SYNO.SynologyDrive.Files ---
   if (api === 'SYNO.SynologyDrive.Files') {
@@ -259,8 +354,8 @@ function handleGet(request: Request): Response {
       'SYNO.MailClient.Mailbox': { path: 'entry.cgi', minVersion: 1, maxVersion: 1 },
       'SYNO.MailClient.Message': { path: 'entry.cgi', minVersion: 1, maxVersion: 10 },
       'SYNO.MailClient.Thread': { path: 'entry.cgi', minVersion: 1, maxVersion: 10 },
-      'SYNO.MailClient.Draft': { path: 'entry.cgi', minVersion: 1, maxVersion: 1 },
-      'SYNO.MailClient.Attachment': { path: 'entry.cgi', minVersion: 1, maxVersion: 1 },
+      'SYNO.MailClient.Draft': { path: 'entry.cgi', minVersion: 1, maxVersion: 6 },
+      'SYNO.MailClient.Attachment': { path: 'entry.cgi', minVersion: 1, maxVersion: 8 },
     });
   }
 
@@ -304,6 +399,14 @@ function handleGet(request: Request): Response {
 
   // --- SYNO.MailClient.Attachment ---
   if (api === 'SYNO.MailClient.Attachment' && method === 'get') {
+    return synoError(103);
+  }
+  if (
+    api === 'SYNO.MailClient.Attachment' &&
+    method === 'download' &&
+    url.searchParams.get('version') === '8'
+  ) {
+    if (url.searchParams.get('md5') !== 'mock-md5-001') return synoError(120);
     const buf = Buffer.from('attachment content');
     return new HttpResponse(buf, {
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -331,12 +434,13 @@ function handleGet(request: Request): Response {
 }
 
 /**
- * Handles all POST requests to entry.cgi, routing by api + method query params.
+ * Handles all POST requests to entry.cgi, routing by api + method params.
  */
-function handlePost(request: Request): Response {
-  const url = new URL(request.url);
-  const api = url.searchParams.get('api');
-  const method = url.searchParams.get('method');
+async function handlePost(request: Request): Promise<Response> {
+  const params = await readPostParams(request);
+  const api = params.get('api');
+  const method = params.get('method');
+  recordMailplusRequest(params, api, method);
 
   // --- SYNO.SynologyDrive.Files ---
   if (api === 'SYNO.SynologyDrive.Files') {
@@ -347,12 +451,12 @@ function handlePost(request: Request): Response {
       return ok({ id: 'dir-new', path: '/mydrive/projects/new-folder' });
     }
     if (method === 'move') {
-      const path = url.searchParams.get('path');
+      const path = params.get('path');
       if (path === '/mydrive/notfound') return synoError(408);
       return ok({ path: '/mydrive/dest/report.osheet' });
     }
     if (method === 'delete') {
-      const path = url.searchParams.get('path');
+      const path = params.get('path');
       if (path === '/mydrive/notfound') return synoError(408);
       return ok({});
     }
@@ -367,7 +471,7 @@ function handlePost(request: Request): Response {
   // --- SYNO.Office.Sheet.Snapshot ---
   if (api === 'SYNO.Office.Sheet.Snapshot') {
     if (method === 'set_cells') {
-      const file_id = url.searchParams.get('file_id');
+      const file_id = params.get('file_id');
       if (file_id === 'not-found') return synoError(408);
       return ok({});
     }
@@ -375,7 +479,7 @@ function handlePost(request: Request): Response {
       return ok({ file_id: 'new-sheet-001', file_path: '/mydrive/NewSheet.osheet' });
     }
     if (method === 'add_sheet') {
-      const file_id = url.searchParams.get('file_id');
+      const file_id = params.get('file_id');
       if (file_id === 'not-found') return synoError(408);
       return ok({ success: true, sheet_id: 'new-sheet-tab-001' });
     }
@@ -383,24 +487,94 @@ function handlePost(request: Request): Response {
 
   // --- SYNO.MailClient.Message (mark / move) ---
   if (api === 'SYNO.MailClient.Message') {
-    if (method === 'mark') return ok({});
-    if (method === 'move') return ok({});
+    if (method === 'mark' || method === 'move') return synoError(103);
+    if (method === 'set_read') {
+      if (
+        params.get('version') !== '10' ||
+        !params.hasBodyParam('api') ||
+        !params.hasBodyParam('id') ||
+        (params.get('read') !== 'true' && params.get('read') !== 'false')
+      ) {
+        return synoError(101);
+      }
+      const ids = JSON.parse(params.get('id') ?? '[]') as string[];
+      return ids.length > 0 ? ok({}) : synoError(120);
+    }
+    if (method === 'set_star') {
+      if (
+        params.get('version') !== '10' ||
+        !params.hasBodyParam('api') ||
+        !params.hasBodyParam('id') ||
+        (params.get('star') !== '1' && params.get('star') !== '0')
+      ) {
+        return synoError(101);
+      }
+      const ids = JSON.parse(params.get('id') ?? '[]') as string[];
+      return ids.length > 0 ? ok({}) : synoError(120);
+    }
+    if (method === 'set_mailbox') {
+      if (
+        params.get('version') !== '10' ||
+        !params.hasBodyParam('api') ||
+        !params.hasBodyParam('id') ||
+        params.get('mailbox_id') === null
+      ) {
+        return synoError(101);
+      }
+      const ids = JSON.parse(params.get('id') ?? '[]') as string[];
+      return ids.length > 0 ? ok({}) : synoError(120);
+    }
+  }
+
+  // --- SYNO.MailClient.Attachment ---
+  if (api === 'SYNO.MailClient.Attachment') {
+    if (method === 'get') return synoError(103);
+    if (method === 'upload') {
+      if (
+        params.get('version') !== '7' ||
+        params.source !== 'multipart' ||
+        !params.hasBodyParam('file') ||
+        params.get('is_inline') !== 'false'
+      ) {
+        return synoError(101);
+      }
+      return ok({ id: 'uploaded-att-001', name: params.get('name') ?? 'attachment' });
+    }
   }
 
   // --- SYNO.MailClient.Draft ---
-  if (api === 'SYNO.MailClient.Draft' && method === 'send') {
-    return ok({ message_id: 'sent-msg-001', sent_at: 1700001000 });
+  if (api === 'SYNO.MailClient.Draft') {
+    if (method === 'create') {
+      if (
+        params.get('version') !== '6' ||
+        !params.hasBodyParam('api') ||
+        params.get('to') !== '["recipient@example.com"]'
+      ) {
+        return synoError(101);
+      }
+      return ok({ id: 'draft-msg-001' });
+    }
+    if (method === 'send') {
+      if (
+        params.get('version') !== '6' ||
+        !params.hasBodyParam('api') ||
+        params.get('id') !== 'draft-msg-001'
+      ) {
+        return synoError(103);
+      }
+      return ok({ message_id: 'sent-msg-001', sent_at: 1700001000 });
+    }
   }
 
   // --- SYNO.Cal.Event (mutations) ---
   if (api === 'SYNO.Cal.Event') {
     if (method === 'create') {
-      return ok({ evt_id: 'evt-new-001', cal_id: url.searchParams.get('cal_id') ?? 'cal-001' });
+      return ok({ evt_id: 'evt-new-001', cal_id: params.get('cal_id') ?? 'cal-001' });
     }
     if (method === 'edit') {
       return ok({
-        evt_id: url.searchParams.get('evt_id') ?? 'evt-001',
-        cal_id: url.searchParams.get('cal_id') ?? 'cal-001',
+        evt_id: params.get('evt_id') ?? 'evt-001',
+        cal_id: params.get('cal_id') ?? 'cal-001',
       });
     }
     if (method === 'delete') {
@@ -432,28 +606,31 @@ const spreadsheetRevokeHandler = http.post(
 );
 
 /** GET /spreadsheets/{id} — spec: nested properties, colCount (not columnCount). */
-const spreadsheetGetInfoHandler = http.get('http://nas.local:3000/spreadsheets/:id', ({ params }) => {
-  const id = params.id as string;
-  if (id === 'sheet-001' || id === 'file123') {
-    return HttpResponse.json({
-      id,
-      properties: { title: 'Budget.osheet', locale: 'en_US' },
-      sheets: [
-        {
-          properties: { title: 'Sheet1', sheetId: 's1', index: 0, hidden: false },
-          rowCount: 10,
-          colCount: 4,
-        },
-        {
-          properties: { title: 'Summary', sheetId: 's2', index: 1, hidden: false },
-          rowCount: 5,
-          colCount: 2,
-        },
-      ],
-    });
-  }
-  return HttpResponse.json({ error: 'Not found' }, { status: 404 });
-});
+const spreadsheetGetInfoHandler = http.get(
+  'http://nas.local:3000/spreadsheets/:id',
+  ({ params }) => {
+    const id = params.id as string;
+    if (id === 'sheet-001' || id === 'file123') {
+      return HttpResponse.json({
+        id,
+        properties: { title: 'Budget.osheet', locale: 'en_US' },
+        sheets: [
+          {
+            properties: { title: 'Sheet1', sheetId: 's1', index: 0, hidden: false },
+            rowCount: 10,
+            colCount: 4,
+          },
+          {
+            properties: { title: 'Summary', sheetId: 's2', index: 1, hidden: false },
+            rowCount: 5,
+            colCount: 2,
+          },
+        ],
+      });
+    }
+    return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+  },
+);
 
 /** GET /spreadsheets/{id}/values/{range} — spec: { range, majorDimension, values }. */
 const spreadsheetGetCellsHandler = http.get(
@@ -528,32 +705,38 @@ const spreadsheetAddSheetHandler = http.post(
 );
 
 /** Spreadsheet API export (XLSX) handler */
-const spreadsheetExportXlsxHandler = http.get('http://nas.local:3000/spreadsheets/:id/xlsx', ({ params }) => {
-  if (params.id === 'not-found') {
-    return HttpResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-  const buffer = Buffer.from('PK\x03\x04'); // Minimal ZIP header
-  return HttpResponse.arrayBuffer(buffer, {
-    headers: {
-      'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      'content-disposition': 'attachment; filename="Budget.xlsx"',
-    },
-  });
-});
+const spreadsheetExportXlsxHandler = http.get(
+  'http://nas.local:3000/spreadsheets/:id/xlsx',
+  ({ params }) => {
+    if (params.id === 'not-found') {
+      return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    const buffer = Buffer.from('PK\x03\x04'); // Minimal ZIP header
+    return HttpResponse.arrayBuffer(buffer, {
+      headers: {
+        'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'content-disposition': 'attachment; filename="Budget.xlsx"',
+      },
+    });
+  },
+);
 
 /** Spreadsheet API export (CSV) handler */
-const spreadsheetExportCsvHandler = http.get('http://nas.local:3000/spreadsheets/:id/sheet/csv', ({ params }) => {
-  if (params.id === 'not-found') {
-    return HttpResponse.json({ error: 'Not found' }, { status: 404 });
-  }
-  const csv = 'Name,Age,City,Score\nAlice,30,NYC,95\nBob,25,LA,87';
-  return HttpResponse.text(csv, {
-    headers: {
-      'content-type': 'text/csv',
-      'content-disposition': 'attachment; filename="data.csv"',
-    },
-  });
-});
+const spreadsheetExportCsvHandler = http.get(
+  'http://nas.local:3000/spreadsheets/:id/sheet/csv',
+  ({ params }) => {
+    if (params.id === 'not-found') {
+      return HttpResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    const csv = 'Name,Age,City,Score\nAlice,30,NYC,95\nBob,25,LA,87';
+    return HttpResponse.text(csv, {
+      headers: {
+        'content-type': 'text/csv',
+        'content-disposition': 'attachment; filename="data.csv"',
+      },
+    });
+  },
+);
 
 /** GET /spreadsheets/{id}/styles/{range} — spec: { range, rows: [{ values: CellStyle[] }] }. */
 const spreadsheetGetStylesHandler = http.get(
@@ -700,7 +883,7 @@ const spreadsheetHandlers = [
  */
 export const driveHandlers = [
   http.get(ENTRY_CGI, ({ request }) => handleGet(request)),
-  http.post(ENTRY_CGI, ({ request }) => handlePost(request)),
+  http.post(ENTRY_CGI, async ({ request }) => await handlePost(request)),
 ];
 
 /** Auth handlers used to bootstrap test clients that need a valid sid. */
