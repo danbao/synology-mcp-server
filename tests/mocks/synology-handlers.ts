@@ -105,28 +105,49 @@ const MAIL_FOLDER_FIXTURE = [
   { id: 'folder-sent', name: 'Sent', path: 'Sent', unread: 0, total: 5, has_children: false },
 ];
 
-const MAIL_MESSAGE_FIXTURE = {
-  id: 'msg-001',
-  subject: 'Hello World',
-  from: { name: 'Alice', address: 'alice@example.com' },
-  to: [{ name: 'Bob', address: 'bob@example.com' }],
-  date: 1700000000,
-  size: 1024,
-  flags: ['\\Seen'],
-  preview: 'This is a preview of the message body.',
+const MAILBOX_V7_FIXTURE = [
+  { id: -1, name: 'INBOX', path: 'INBOX' },
+  { id: -4, name: 'Sent', path: 'Sent' },
+  { id: 42, name: 'Projects', path: 'Projects' },
+];
+
+const MAIL_THREAD_FIXTURE = {
+  id: 9001,
+  star: 0,
+  unread: 0,
+  last_modified: 1700000000,
+  draft: [],
+  message: [
+    {
+      id: 1001,
+      subject: 'Hello World',
+      from: 'Alice <alice@example.com>',
+      recipients: ['Bob <bob@example.com>'],
+      arrival_time: 1700000000,
+      last_modified: 1700000000,
+      mailbox_id: -1,
+      read: true,
+      star: 0,
+      attachment: [],
+      body_preview: 'This is a preview of the message body.',
+      type: 1,
+    },
+  ],
 };
 
 const MAIL_DETAIL_FIXTURE = {
   id: 'msg-001',
   subject: 'Hello World',
-  from: { name: 'Alice', address: 'alice@example.com' },
-  to: [{ name: 'Bob', address: 'bob@example.com' }],
+  from: 'Alice <alice@example.com>',
+  to: ['Bob <bob@example.com>'],
   cc: [],
   bcc: [],
-  date: 1700000000,
-  body_text: 'Hello, this is the message body.',
-  body_html: '<p>Hello, this is the message body.</p>',
-  attachments: [{ id: 'att-001', name: 'file.txt', mime_type: 'text/plain', size: 100 }],
+  arrival_time: 1700000000,
+  body: {
+    plain: 'Hello, this is the message body.',
+    html: '<p>Hello, this is the message body.</p>',
+  },
+  attachment: [{ id: 'att-001', name: 'file.txt', mime_type: 'text/plain', size: 100 }],
 };
 
 // ---------------------------------------------------------------------------
@@ -236,7 +257,8 @@ function handleGet(request: Request): Response {
     }
     return ok({
       'SYNO.MailClient.Mailbox': { path: 'entry.cgi', minVersion: 1, maxVersion: 1 },
-      'SYNO.MailClient.Message': { path: 'entry.cgi', minVersion: 1, maxVersion: 1 },
+      'SYNO.MailClient.Message': { path: 'entry.cgi', minVersion: 1, maxVersion: 10 },
+      'SYNO.MailClient.Thread': { path: 'entry.cgi', minVersion: 1, maxVersion: 10 },
       'SYNO.MailClient.Draft': { path: 'entry.cgi', minVersion: 1, maxVersion: 1 },
       'SYNO.MailClient.Attachment': { path: 'entry.cgi', minVersion: 1, maxVersion: 1 },
     });
@@ -244,18 +266,39 @@ function handleGet(request: Request): Response {
 
   // --- SYNO.MailClient.Mailbox ---
   if (api === 'SYNO.MailClient.Mailbox' && method === 'list') {
+    if (url.searchParams.get('version') === '7') {
+      return ok({ mailbox: MAILBOX_V7_FIXTURE, total: MAILBOX_V7_FIXTURE.length });
+    }
     return ok(MAIL_FOLDER_FIXTURE);
+  }
+
+  // --- SYNO.MailClient.Thread ---
+  if (api === 'SYNO.MailClient.Thread' && method === 'list') {
+    const condition = JSON.parse(url.searchParams.get('condition') ?? '[]') as Array<{
+      name?: string;
+      value?: string;
+    }>;
+    const mailboxId = condition.find((item) => item.name === 'mailbox')?.value;
+    if (mailboxId !== '-1' && mailboxId !== '42') return synoError(120);
+    return ok({
+      keyword: '',
+      matched_ids: [],
+      split_keyword: '',
+      thread: [MAIL_THREAD_FIXTURE],
+      total: 1,
+    });
   }
 
   // --- SYNO.MailClient.Message ---
   if (api === 'SYNO.MailClient.Message') {
     if (method === 'list') {
-      return ok({ total: 1, messages: [MAIL_MESSAGE_FIXTURE] });
+      return synoError(103);
     }
     if (method === 'get') {
-      const messageId = url.searchParams.get('message_id');
-      if (messageId === 'not-found') return synoError(408);
-      return ok(MAIL_DETAIL_FIXTURE);
+      const ids = JSON.parse(url.searchParams.get('id') ?? '[]') as string[];
+      if (ids.length === 0) return synoError(120);
+      if (ids.includes('not-found')) return synoError(408);
+      return ok({ message: [MAIL_DETAIL_FIXTURE] });
     }
   }
 
