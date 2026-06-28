@@ -19,7 +19,7 @@
 | Cross-origin Streamable HTTP hijacking | `originGuard()` validates present `Origin` headers on `/mcp` requests |
 | MITM between server and NAS | TLS verification enabled by default; `SYNO_IGNORE_CERT=true` is opt-in, logged at startup |
 | Accidental destructive operations | All write/delete/send tools require explicit `"confirm": true` in tool input |
-| Supply-chain compromise of published package | npm publish uses `--provenance` for SLSA attestation |
+| Supply-chain compromise of published package | Tag-triggered release checks run before publishing to GitHub npm Packages and GHCR |
 
 ### Out-of-scope threats
 

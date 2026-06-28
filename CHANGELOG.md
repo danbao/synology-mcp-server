@@ -10,6 +10,26 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ---
 
+## [0.6.0] - 2026-06-28
+
+### Changed — Streamable HTTP and GitHub Packages release
+- Replaced legacy HTTP+SSE `/sse` + `/messages` transport with MCP Streamable HTTP on `/mcp`.
+- Streamable HTTP mode now requires `MCP_AUTH_TOKEN`; Docker/LAN examples listen on `0.0.0.0:3100` and use Bearer auth.
+- Release workflow now runs checks before publishing to GitHub npm Packages and GHCR.
+
+### Added
+- Docker publish target: `ghcr.io/danbao/synology-office-mcp:0.6.0` and `latest`.
+- GitHub npm package target: `@danbao/synology-office-mcp`.
+- `pnpm-lock.yaml` and `pnpm-workspace.yaml` for frozen Docker/CI installs.
+
+### Removed
+- Removed the deprecated SSE transport and its auth tests.
+
+### Verified
+- `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, Docker build, and compose config checks pass.
+
+---
+
 ## [0.5.0] - 2026-05-22
 
 ### Added — Spreadsheet API 3.4.1 endpoints
@@ -275,10 +295,12 @@ DSM 7.3.2 returned error 102 ("API does not exist") for legacy namespaces. Renam
 
 ---
 
-[Unreleased]: https://github.com/vocweb/synology-mcp-server/compare/v0.3.3...HEAD
-[0.3.3]: https://github.com/vocweb/synology-mcp-server/compare/v0.3.2...v0.3.3
-[0.3.2]: https://github.com/vocweb/synology-mcp-server/compare/v0.3.1...v0.3.2
-[0.3.1]: https://github.com/vocweb/synology-mcp-server/compare/v0.3.0...v0.3.1
-[0.3.0]: https://github.com/vocweb/synology-mcp-server/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/vocweb/synology-mcp-server/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/vocweb/synology-mcp-server/releases/tag/v0.1.0
+[Unreleased]: https://github.com/danbao/synology-mcp-server/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/danbao/synology-mcp-server/compare/v0.5.0...v0.6.0
+[0.5.0]: https://github.com/danbao/synology-mcp-server/releases/tag/v0.5.0
+[0.3.3]: https://github.com/danbao/synology-mcp-server/compare/v0.3.2...v0.3.3
+[0.3.2]: https://github.com/danbao/synology-mcp-server/compare/v0.3.1...v0.3.2
+[0.3.1]: https://github.com/danbao/synology-mcp-server/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/danbao/synology-mcp-server/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/danbao/synology-mcp-server/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/danbao/synology-mcp-server/releases/tag/v0.1.0

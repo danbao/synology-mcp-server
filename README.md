@@ -1,6 +1,6 @@
 # synology-office-mcp
 
-[![npm version](https://badge.fury.io/js/synology-office-mcp.svg)](https://badge.fury.io/js/synology-office-mcp)
+[![GitHub release](https://img.shields.io/github/v/release/danbao/synology-mcp-server)](https://github.com/danbao/synology-mcp-server/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js 22+](https://img.shields.io/badge/node-22%2B-brightgreen)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](https://www.typescriptlang.org)
@@ -12,7 +12,7 @@ Visit [landing page](https://synology-mcp-server.smb-base.com/).
 
 Wraps the official [Synology Office Suite REST API](https://office-suite-api.synology.com). LAN-only by default — no data leaves your network unless you explicitly opt in.
 
-> **v0.3.0 milestone** — All four modules (Drive, Spreadsheet, MailPlus, Calendar) implemented and unit-tested with MSW mocks. Smoke tests against a real DSM 7.2.2 NAS are needed before declaring v1.0.0 production-ready. See [CHANGELOG](./CHANGELOG.md) for details.
+> **v0.6.0 milestone** — All four modules are wired, with stdio plus Streamable HTTP transport for LAN/Docker deployments. Smoke tests against a real DSM 7.2.2 NAS are still recommended before declaring v1.0.0 production-ready. See [CHANGELOG](./CHANGELOG.md) for details.
 
 ---
 
@@ -77,18 +77,22 @@ Modules **not** included (no public API yet): Synology Docs, Synology Slides.
 
 ## Install
 
-**Global CLI (npm/pnpm):**
+**Global CLI (GitHub npm Packages):**
 
 ```bash
-npm install -g synology-office-mcp
-# or
-pnpm add -g synology-office-mcp
+npm install -g @danbao/synology-office-mcp --registry=https://npm.pkg.github.com
+```
+
+If GitHub Packages returns `401`, authenticate first with a GitHub token that can read packages:
+
+```bash
+npm login --scope=@danbao --registry=https://npm.pkg.github.com
 ```
 
 **From source:**
 
 ```bash
-git clone https://github.com/vocweb/synology-mcp-server.git
+git clone https://github.com/danbao/synology-mcp-server.git
 cd synology-mcp-server
 pnpm install && pnpm build
 ```
@@ -155,7 +159,7 @@ export SYNO_SS_DSM_HTTPS=false         # false → skip TLS verify on back-call
 # stdio mode (default — used by Claude Desktop / Claude Code)
 node dist/index.js
 
-# Or via the global CLI after `npm install -g synology-office-mcp`
+# Or via the global CLI after installing from GitHub Packages
 synology-mcp
 ```
 

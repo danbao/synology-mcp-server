@@ -1,18 +1,19 @@
 {
   "name": "synology-office-mcp",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "MCP server exposing Synology Drive, Spreadsheet, MailPlus, and Calendar as AI-agent tools",
   "type": "module",
   "license": "MIT",
   "author": "Tien <chutien@gmail.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vocweb/synology-mcp-server.git"
+    "url": "git+https://github.com/danbao/synology-mcp-server.git"
   },
-  "homepage": "https://github.com/vocweb/synology-mcp-server#readme",
+  "homepage": "https://github.com/danbao/synology-mcp-server#readme",
   "bugs": {
-    "url": "https://github.com/vocweb/synology-mcp-server/issues"
+    "url": "https://github.com/danbao/synology-mcp-server/issues"
   },
+  "packageManager": "pnpm@11.7.0",
   "keywords": [
     "mcp",
     "synology",

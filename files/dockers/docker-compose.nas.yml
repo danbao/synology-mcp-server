@@ -8,7 +8,7 @@
 
 services:
   synology-mcp:
-    image: synology-office-mcp:0.2.0
+    image: ghcr.io/danbao/synology-office-mcp:0.6.0
     container_name: synology-office-mcp
     restart: unless-stopped
     network_mode: host

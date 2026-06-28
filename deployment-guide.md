@@ -55,7 +55,7 @@ Run the MCP server in a container on your laptop / workstation. The container ta
 The repo ships a multi-stage [`files/dockers/Dockerfile`](./files/dockers/Dockerfile). Build from repo root:
 
 ```bash
-docker build -t synology-office-mcp:0.3.3 -f files/dockers/Dockerfile .
+docker build -t synology-office-mcp:0.6.0 -f files/dockers/Dockerfile .
 ```
 
 ### 1.3 Run — stdio (for Claude Desktop / Claude Code)
@@ -71,7 +71,7 @@ stdio mode requires the client to spawn the process directly. Wire Docker as the
       "args": [
         "run", "--rm", "-i",
         "--env-file", "/absolute/path/to/.env",
-        "synology-office-mcp:0.3.3"
+        "ghcr.io/danbao/synology-office-mcp:0.6.0"
       ]
     }
   }
@@ -91,7 +91,7 @@ docker run -d \
   -e MCP_HTTP_PATH=/mcp \
   -e MCP_AUTH_TOKEN="$(openssl rand -hex 32)" \
   -p 127.0.0.1:3100:3100 \
-  synology-office-mcp:0.3.3
+  ghcr.io/danbao/synology-office-mcp:0.6.0
 ```
 
 Verify:
@@ -124,7 +124,7 @@ Run directly on your host with Node.js.
 ### 2.2 Build
 
 ```bash
-git clone https://github.com/vocweb/synology-mcp-server.git
+git clone https://github.com/danbao/synology-mcp-server.git
 cd synology-office-mcp
 pnpm install --frozen-lockfile
 pnpm build
@@ -260,15 +260,15 @@ Run the MCP server inside **Container Manager** (formerly Docker) on the NAS its
 **Option A — build locally, save, transfer:**
 
 ```bash
-docker build -t synology-office-mcp:0.3.3 .
-docker save synology-office-mcp:0.3.3 | gzip > synology-office-mcp-0.3.3.tar.gz
-scp synology-office-mcp-0.3.3.tar.gz admin@nas:/volume1/docker/
+docker build -t synology-office-mcp:0.6.0 .
+docker save synology-office-mcp:0.6.0 | gzip > synology-office-mcp-0.6.0.tar.gz
+scp synology-office-mcp-0.6.0.tar.gz admin@nas:/volume1/docker/
 ```
 
 Then on the NAS (SSH or Container Manager → Image → Add → From file):
 
 ```bash
-gunzip -c /volume1/docker/synology-office-mcp-0.3.3.tar.gz | sudo docker load
+gunzip -c /volume1/docker/synology-office-mcp-0.6.0.tar.gz | sudo docker load
 ```
 
 **Option B — build on NAS via SSH** (requires Node toolchain in the build stage; multi-stage `Dockerfile` above handles it):
@@ -276,7 +276,7 @@ gunzip -c /volume1/docker/synology-office-mcp-0.3.3.tar.gz | sudo docker load
 ```bash
 ssh admin@nas
 cd /volume1/docker/synology-office-mcp
-sudo docker build -t synology-office-mcp:0.3.3 .
+sudo docker build -t synology-office-mcp:0.6.0 .
 ```
 
 ### 3.3 Create `.env` on the NAS
@@ -349,7 +349,7 @@ sudo mkdir -p /volume1/apps/synology-office-mcp
 sudo chown $USER /volume1/apps/synology-office-mcp
 cd /volume1/apps/synology-office-mcp
 
-git clone https://github.com/vocweb/synology-mcp-server.git .
+git clone https://github.com/danbao/synology-mcp-server.git .
 # or upload a release tarball if git is unavailable
 
 corepack enable
@@ -422,7 +422,7 @@ If startup aborts with `Configuration validation failed:`, fix the listed env va
 
 ```bash
 # Docker
-docker pull synology-office-mcp:<new-version>   # or rebuild
+docker pull ghcr.io/danbao/synology-office-mcp:<new-version>   # or rebuild
 docker compose up -d
 
 # Bare metal
