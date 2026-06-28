@@ -5,7 +5,12 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { setupServer } from 'msw/node';
-import { allHandlers, setMailplusAvailable } from '../mocks/synology-handlers.js';
+import {
+  allHandlers,
+  clearMailplusRequestLog,
+  mailplusRequestLog,
+  setMailplusAvailable,
+} from '../mocks/synology-handlers.js';
 import { createTestMailPlusClient } from '../mocks/test-client-factory.js';
 
 const server = setupServer(...allHandlers);
@@ -13,6 +18,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
   server.resetHandlers();
   setMailplusAvailable(true);
+  clearMailplusRequestLog();
 });
 afterAll(() => server.close());
 
@@ -102,6 +108,13 @@ describe('MailPlusClient.getMessage', () => {
     expect(msg.attachments[0]?.content_base64).not.toBeNull();
     // Must be valid base64 string
     expect(typeof msg.attachments[0]?.content_base64).toBe('string');
+    const download = mailplusRequestLog.find((entry) => entry.method === 'download');
+    expect(download).toMatchObject({
+      api: 'SYNO.MailClient.Attachment',
+      version: '8',
+      source: 'query',
+    });
+    expect(download?.params['md5']).toBe('mock-md5-001');
   });
 
   it('throws on not-found message', async () => {
@@ -120,9 +133,13 @@ describe('MailPlusClient.send', () => {
     });
     expect(result.message_id).toBe('sent-msg-001');
     expect(result.sent_at).toBe(1700001000);
+    expect(mailplusRequestLog.filter((entry) => entry.api === 'SYNO.MailClient.Draft')).toEqual([
+      expect.objectContaining({ method: 'create', version: '6', source: 'form' }),
+      expect.objectContaining({ method: 'send', version: '6', source: 'form' }),
+    ]);
   });
 
-  it('includes attachment buffer in multipart body', async () => {
+  it('uploads attachment before creating and sending draft', async () => {
     const client = createTestMailPlusClient();
     const result = await client.send({
       to: ['recipient@example.com'],
@@ -137,23 +154,91 @@ describe('MailPlusClient.send', () => {
       ],
     });
     expect(result.message_id).toBeDefined();
+    const upload = mailplusRequestLog.find((entry) => entry.method === 'upload');
+    expect(upload).toMatchObject({
+      api: 'SYNO.MailClient.Attachment',
+      version: '7',
+      source: 'multipart',
+    });
+    expect(upload?.params['is_inline']).toBe('false');
+    const create = mailplusRequestLog.find(
+      (entry) => entry.api === 'SYNO.MailClient.Draft' && entry.method === 'create',
+    );
+    expect(create?.params['attachment']).toBe('["uploaded-att-001"]');
   });
 });
 
 describe('MailPlusClient.mark', () => {
-  it('resolves without error for valid mark action', async () => {
+  it('uses Message.set_read v10 for read/unread actions', async () => {
     const client = createTestMailPlusClient();
     await expect(
       client.mark({ message_ids: ['msg-001'], action: 'read' }),
     ).resolves.toBeUndefined();
+    await expect(
+      client.mark({ message_ids: ['msg-002'], action: 'unread' }),
+    ).resolves.toBeUndefined();
+    expect(mailplusRequestLog.filter((entry) => entry.api === 'SYNO.MailClient.Message')).toEqual([
+      expect.objectContaining({
+        method: 'set_read',
+        version: '10',
+        source: 'form',
+        params: expect.objectContaining({ id: '["msg-001"]', read: 'true' }),
+      }),
+      expect.objectContaining({
+        method: 'set_read',
+        version: '10',
+        source: 'form',
+        params: expect.objectContaining({ id: '["msg-002"]', read: 'false' }),
+      }),
+    ]);
+  });
+
+  it('uses Message.set_star v10 for flag/unflag actions', async () => {
+    const client = createTestMailPlusClient();
+    await expect(
+      client.mark({ message_ids: ['msg-001'], action: 'flag' }),
+    ).resolves.toBeUndefined();
+    await expect(
+      client.mark({ message_ids: ['msg-002'], action: 'unflag' }),
+    ).resolves.toBeUndefined();
+    expect(mailplusRequestLog.filter((entry) => entry.api === 'SYNO.MailClient.Message')).toEqual([
+      expect.objectContaining({
+        method: 'set_star',
+        version: '10',
+        source: 'form',
+        params: expect.objectContaining({ id: '["msg-001"]', star: '1' }),
+      }),
+      expect.objectContaining({
+        method: 'set_star',
+        version: '10',
+        source: 'form',
+        params: expect.objectContaining({ id: '["msg-002"]', star: '0' }),
+      }),
+    ]);
   });
 });
 
 describe('MailPlusClient.move', () => {
-  it('resolves without error for valid move', async () => {
+  it('resolves mailbox path and uses Message.set_mailbox v10', async () => {
     const client = createTestMailPlusClient();
     await expect(
       client.move({ message_ids: ['msg-001'], dest_folder: 'Archive' }),
     ).resolves.toBeUndefined();
+    const move = mailplusRequestLog.find((entry) => entry.method === 'set_mailbox');
+    expect(move).toMatchObject({
+      api: 'SYNO.MailClient.Message',
+      version: '10',
+      source: 'form',
+      params: expect.objectContaining({ id: '["msg-001"]', mailbox_id: '-2' }),
+    });
+  });
+
+  it('returns MAILBOX_NOT_FOUND for unknown destination folder', async () => {
+    const client = createTestMailPlusClient();
+    await expect(
+      client.move({ message_ids: ['msg-001'], dest_folder: 'Missing Folder' }),
+    ).rejects.toMatchObject({
+      code: 'MAILBOX_NOT_FOUND',
+    });
   });
 });

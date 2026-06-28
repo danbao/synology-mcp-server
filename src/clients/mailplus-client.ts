@@ -8,11 +8,12 @@
 
 import FormData from 'form-data';
 import { BaseClient } from './base-client.js';
-import { httpFetch } from '../utils/http-fetch.js';
+import { httpFetch, type FetchResponse } from '../utils/http-fetch.js';
 import type { AuthManager } from '../auth/auth-manager.js';
 import type { SynologyConfig } from '../types/index.js';
 import type { SynoMailFolder, SynoMailMessage } from '../types/synology-types.js';
-import { NotFoundError, ValidationError } from '../errors.js';
+import { NetworkError, NotFoundError, ValidationError } from '../errors.js';
+import { mapSynologyError } from '../utils/synology-error-map.js';
 
 const ENTRY = '/webapi/entry.cgi';
 const WELL_KNOWN_MAILBOX_IDS = new Map<string, string>([
@@ -131,6 +132,10 @@ export interface SynoMailAttachmentMeta {
   name: string;
   mime_type: string;
   size: number;
+  md5?: string;
+  msg_path?: string;
+  part_id?: string;
+  is_cms?: boolean;
 }
 
 /** Attachment including raw content */
@@ -187,6 +192,43 @@ interface SynoApiInfoEnvelope {
   data?: SynoApiInfoResult;
 }
 
+type MailPlusParamValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | Array<string | number | boolean | null>
+  | Record<string, unknown>;
+
+interface SynologyEnvelope<T> {
+  success: boolean;
+  data?: T;
+  error?: { code?: number };
+}
+
+interface SynoAttachmentUploadResponse {
+  id?: string | number;
+  attachment_id?: string | number;
+  upload_id?: string | number;
+  attachment?: SynoAttachmentUploadResponse | SynoAttachmentUploadResponse[];
+}
+
+interface SynoDraftCreateResponse {
+  id?: string | number;
+  draft_id?: string | number;
+  message_id?: string | number;
+  draft?: { id?: string | number; draft_id?: string | number };
+}
+
+interface SynoDraftSendResponse {
+  id?: string | number;
+  message_id?: string | number;
+  sent_at?: number;
+  time?: number;
+  message?: { id?: string | number; date?: number; sent_at?: number };
+}
+
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
@@ -204,6 +246,109 @@ export class MailPlusClient extends BaseClient {
   constructor(config: SynologyConfig, authManager: AuthManager) {
     super(config, authManager);
     this.availabilityTimeoutMs = config.requestTimeoutMs;
+  }
+
+  private async mailplusFormPost<T>(
+    params: Record<string, MailPlusParamValue>,
+    retryOn401 = true,
+  ): Promise<T> {
+    const sid = await this.authManager.getToken();
+    const body = buildMailPlusFormBody(params);
+    const response = await this.fetchMailPlusPost({
+      headers: { Cookie: `id=${sid}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    return await this.unwrapMailPlusEnvelope<T>(response, params, retryOn401, () =>
+      this.mailplusFormPost<T>(params, false),
+    );
+  }
+
+  private async mailplusMultipartPost<T>(
+    params: Record<string, MailPlusParamValue>,
+    form: FormData,
+    retryOn401 = true,
+  ): Promise<T> {
+    for (const [key, value] of Object.entries(params)) {
+      const serialized = serializeMailPlusParam(value);
+      if (serialized !== undefined) form.append(key, serialized);
+    }
+
+    const sid = await this.authManager.getToken();
+    const response = await this.fetchMailPlusPost({
+      headers: {
+        Cookie: `id=${sid}`,
+        ...form.getHeaders(),
+      },
+      body: form.getBuffer(),
+    });
+    return await this.unwrapMailPlusEnvelope<T>(response, params, retryOn401, () =>
+      this.mailplusMultipartPost<T>(params, form, false),
+    );
+  }
+
+  private async fetchMailPlusPost(init: {
+    headers: Record<string, string>;
+    body: URLSearchParams | Buffer;
+  }): Promise<FetchResponse> {
+    try {
+      return await httpFetch(
+        `${this.baseUrl}${ENTRY}`,
+        {
+          method: 'POST',
+          headers: init.headers,
+          body: init.body,
+          signal: AbortSignal.timeout(this.availabilityTimeoutMs),
+        },
+        this.dispatcher,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new NetworkError(`Request timed out after ${this.availabilityTimeoutMs}ms`);
+      }
+      throw new NetworkError(`Network error: ${msg}`);
+    }
+  }
+
+  private async unwrapMailPlusEnvelope<T>(
+    response: FetchResponse,
+    params: Record<string, MailPlusParamValue>,
+    retryOn401: boolean,
+    retry: () => Promise<T>,
+  ): Promise<T> {
+    if (response.status === 401) {
+      if (retryOn401) {
+        this.authManager.invalidate();
+        return await retry();
+      }
+      throw mapSynologyError(119, mailPlusApiName(params));
+    }
+
+    if (response.status >= 500) {
+      throw new NetworkError(`Synology API HTTP ${response.status}`);
+    }
+
+    let envelope: SynologyEnvelope<T>;
+    try {
+      envelope = (await response.json()) as SynologyEnvelope<T>;
+    } catch {
+      throw new NetworkError(`Synology API returned non-JSON response (HTTP ${response.status})`);
+    }
+
+    if (!envelope.success) {
+      const code = envelope.error?.code ?? 100;
+      if (retryOn401 && (code === 108 || code === 119)) {
+        this.authManager.invalidate();
+        return await retry();
+      }
+      throw mapSynologyError(code, mailPlusApiName(params));
+    }
+
+    if (envelope.data === undefined) {
+      throw new NetworkError('Synology API returned success=true but no data field');
+    }
+
+    return envelope.data;
   }
 
   /**
@@ -473,7 +618,7 @@ export class MailPlusClient extends BaseClient {
     const attachmentsWithContent = await Promise.all(
       detail.attachments.map(async (att) => {
         try {
-          const content = await this.fetchAttachmentContent(att.id, opts.message_id);
+          const content = await this.fetchAttachmentContent(att, opts.message_id);
           return { ...att, content_base64: content.toString('base64') };
         } catch {
           return { ...att, content_base64: null };
@@ -502,18 +647,37 @@ export class MailPlusClient extends BaseClient {
   /**
    * Fetch raw attachment bytes from SYNO.MailClient.Attachment.
    *
-   * @param attachment_id - Attachment ID.
+   * @param attachment - Attachment metadata and download identifiers.
    * @param message_id - Parent message ID.
    */
-  private async fetchAttachmentContent(attachment_id: string, message_id: string): Promise<Buffer> {
+  private async fetchAttachmentContent(
+    attachment: SynoMailAttachmentMeta,
+    message_id: string,
+  ): Promise<Buffer> {
     const sid = await this.authManager.getToken();
     const qs = new URLSearchParams({
       api: 'SYNO.MailClient.Attachment',
-      version: '1',
-      method: 'get',
-      attachment_id,
-      message_id,
+      version: '8',
+      method: 'download',
+      type: 'original',
     });
+
+    if (attachment.md5 !== undefined && attachment.md5.length > 0) {
+      qs.set('md5', attachment.md5);
+    } else if (
+      attachment.msg_path !== undefined &&
+      attachment.msg_path.length > 0 &&
+      attachment.part_id !== undefined &&
+      attachment.part_id.length > 0
+    ) {
+      qs.set('msg_path', attachment.msg_path);
+      qs.set('part_id', attachment.part_id);
+      if (attachment.is_cms !== undefined) qs.set('is_cms', String(attachment.is_cms));
+    } else {
+      qs.set('id', attachment.id);
+      qs.set('message_id', message_id);
+    }
+
     const url = `${this.baseUrl}${ENTRY}?${qs.toString()}`;
     const response = await httpFetch(url, { headers: { Cookie: `id=${sid}` } }, this.dispatcher);
 
@@ -527,71 +691,68 @@ export class MailPlusClient extends BaseClient {
 
   /**
    * Send an email message using SYNO.MailClient.Draft.
-   * Attachments are decoded from base64 to Buffer and sent as multipart.
-   *
-   * @param opts - Recipient lists, subject, body, and optional attachments.
-   */
-  /**
-   * Send an email message using SYNO.MailClient.Draft.
-   * api/version/method go on the query string (matching all other POST handlers);
-   * message fields and attachments go in the multipart body.
+   * Draft payload is submitted as form-urlencoded body; local attachments are
+   * uploaded first and referenced by attachment IDs in the draft create call.
    *
    * @param opts - Recipient lists, subject, body, and optional attachments.
    */
   async send(opts: SendMessageOpts): Promise<SynoSendResult> {
-    const form = new FormData();
-    form.append('to', JSON.stringify(opts.to));
-    form.append('subject', opts.subject);
-    form.append('body', opts.body);
-    form.append('body_format', opts.body_format ?? 'text');
-
-    if (opts.cc !== undefined) form.append('cc', JSON.stringify(opts.cc));
-    if (opts.bcc !== undefined) form.append('bcc', JSON.stringify(opts.bcc));
-    if (opts.account !== undefined) form.append('account', opts.account);
-
-    if (opts.attachments !== undefined) {
-      for (const att of opts.attachments) {
-        const buf = Buffer.from(att.content_base64, 'base64');
-        form.append('attachment', buf, { filename: att.name, contentType: att.mime_type });
-      }
-    }
-
-    const sid = await this.authManager.getToken();
-    const qs = new URLSearchParams({
+    const attachmentIds = await this.uploadAttachments(opts.attachments ?? []);
+    const draft = await this.mailplusFormPost<SynoDraftCreateResponse>({
       api: 'SYNO.MailClient.Draft',
-      version: '1',
-      method: 'send',
+      version: 6,
+      method: 'create',
+      to: opts.to,
+      subject: opts.subject,
+      body: opts.body,
+      body_format: opts.body_format ?? 'text',
+      cc: opts.cc,
+      bcc: opts.bcc,
+      attachment: attachmentIds.length > 0 ? attachmentIds : undefined,
+      from: opts.account,
     });
-    const url = `${this.baseUrl}${ENTRY}?${qs.toString()}`;
 
-    const response = await httpFetch(
-      url,
-      {
-        method: 'POST',
-        headers: {
-          Cookie: `id=${sid}`,
-          ...form.getHeaders(),
-        },
-        body: form.getBuffer(),
-      },
-      this.dispatcher,
-    );
+    const draftId = extractDraftId(draft);
+    const sent = await this.mailplusFormPost<SynoDraftSendResponse>({
+      api: 'SYNO.MailClient.Draft',
+      version: 6,
+      method: 'send',
+      id: draftId,
+    });
 
-    if (!response.ok) {
-      throw new Error(`Send failed with HTTP ${response.status}`);
-    }
-
-    const json = (await response.json()) as {
-      success: boolean;
-      data?: SynoSendResult;
-      error?: { code: number };
+    return {
+      message_id: extractSentMessageId(sent) ?? draftId,
+      sent_at: extractSentAt(sent) ?? Math.floor(Date.now() / 1000),
     };
-    if (!json.success || json.data === undefined) {
-      const code = json.error?.code ?? 100;
-      throw new Error(`Send failed with Synology error code ${code}`);
+  }
+
+  private async uploadAttachments(
+    attachments: Array<{ name: string; content_base64: string; mime_type: string }>,
+  ): Promise<string[]> {
+    const ids: string[] = [];
+
+    for (const attachment of attachments) {
+      const form = new FormData();
+      const buf = Buffer.from(attachment.content_base64, 'base64');
+      form.append('name', attachment.name);
+      form.append('is_inline', 'false');
+      form.append('file', buf, {
+        filename: attachment.name,
+        contentType: attachment.mime_type,
+      });
+
+      const response = await this.mailplusMultipartPost<SynoAttachmentUploadResponse>(
+        {
+          api: 'SYNO.MailClient.Attachment',
+          version: 7,
+          method: 'upload',
+        },
+        form,
+      );
+      ids.push(extractUploadedAttachmentId(response));
     }
 
-    return json.data;
+    return ids;
   }
 
   /**
@@ -600,16 +761,22 @@ export class MailPlusClient extends BaseClient {
    * @param opts - message_ids and action.
    */
   async mark(opts: MarkMessagesOpts): Promise<void> {
-    const params: Record<string, string | number | boolean> = {
+    const method = opts.action === 'read' || opts.action === 'unread' ? 'set_read' : 'set_star';
+    const valueParam =
+      method === 'set_read'
+        ? { read: opts.action === 'read' }
+        : { star: opts.action === 'flag' ? 1 : 0 };
+
+    const params: Record<string, MailPlusParamValue> = {
       api: 'SYNO.MailClient.Message',
-      version: 1,
-      method: 'mark',
-      message_ids: JSON.stringify(opts.message_ids),
-      action: opts.action,
+      version: 10,
+      method,
+      id: opts.message_ids,
+      ...valueParam,
     };
     if (opts.account !== undefined) params['account'] = opts.account;
 
-    await this.request<unknown>({ endpoint: ENTRY, method: 'POST', params });
+    await this.mailplusFormPost<unknown>(params);
   }
 
   /**
@@ -618,17 +785,73 @@ export class MailPlusClient extends BaseClient {
    * @param opts - message_ids and dest_folder path.
    */
   async move(opts: MoveMessagesOpts): Promise<void> {
-    const params: Record<string, string | number | boolean> = {
+    const mailboxId = await this.resolveMailboxId(opts.dest_folder, opts.account);
+    const params: Record<string, MailPlusParamValue> = {
       api: 'SYNO.MailClient.Message',
-      version: 1,
-      method: 'move',
-      message_ids: JSON.stringify(opts.message_ids),
-      dest_folder: opts.dest_folder,
+      version: 10,
+      method: 'set_mailbox',
+      id: opts.message_ids,
+      mailbox_id: mailboxId,
     };
     if (opts.account !== undefined) params['account'] = opts.account;
 
-    await this.request<unknown>({ endpoint: ENTRY, method: 'POST', params });
+    await this.mailplusFormPost<unknown>(params);
   }
+}
+
+function buildMailPlusFormBody(params: Record<string, MailPlusParamValue>): URLSearchParams {
+  const body = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    const serialized = serializeMailPlusParam(value);
+    if (serialized !== undefined) body.set(key, serialized);
+  }
+  return body;
+}
+
+function serializeMailPlusParam(value: MailPlusParamValue): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
+}
+
+function mailPlusApiName(params: Record<string, MailPlusParamValue>): string {
+  const api = params['api'];
+  return typeof api === 'string' ? api : 'SYNO.MailClient';
+}
+
+function extractUploadedAttachmentId(response: SynoAttachmentUploadResponse): string {
+  const direct = primitiveToString(
+    response.id ?? response.attachment_id ?? response.upload_id ?? undefined,
+  );
+  if (direct.length > 0) return direct;
+
+  const attachment = response.attachment;
+  const first = Array.isArray(attachment) ? attachment[0] : attachment;
+  if (first !== undefined) return extractUploadedAttachmentId(first);
+
+  throw new NetworkError('MailPlus attachment upload succeeded but returned no attachment id');
+}
+
+function extractDraftId(response: SynoDraftCreateResponse): string {
+  const id = primitiveToString(
+    response.id ??
+      response.draft_id ??
+      response.message_id ??
+      response.draft?.id ??
+      response.draft?.draft_id,
+  );
+  if (id.length > 0) return id;
+  throw new NetworkError('MailPlus draft create succeeded but returned no draft id');
+}
+
+function extractSentMessageId(response: SynoDraftSendResponse): string | undefined {
+  const id = primitiveToString(response.message_id ?? response.id ?? response.message?.id);
+  return id.length > 0 ? id : undefined;
+}
+
+function extractSentAt(response: SynoDraftSendResponse): number | undefined {
+  return response.sent_at ?? response.time ?? response.message?.sent_at ?? response.message?.date;
 }
 
 function parseMailAddress(value: unknown): { name: string; address: string } {
@@ -676,18 +899,36 @@ function normalizeAttachments(values: unknown[]): SynoMailAttachmentMeta[] {
       content_type?: unknown;
       size?: unknown;
       file_size?: unknown;
+      md5?: unknown;
+      msg_path?: unknown;
+      part_id?: unknown;
+      is_cms?: unknown;
     };
     const name = candidate.name ?? candidate.filename;
     const mimeType = candidate.mime_type ?? candidate.mime ?? candidate.content_type;
     const size = candidate.size ?? candidate.file_size;
-
-    return {
+    const attachment: SynoMailAttachmentMeta = {
       id: primitiveToString(candidate.id),
       name: typeof name === 'string' && name.length > 0 ? name : 'attachment',
       mime_type:
         typeof mimeType === 'string' && mimeType.length > 0 ? mimeType : 'application/octet-stream',
       size: typeof size === 'number' ? size : 0,
     };
+
+    if (typeof candidate.md5 === 'string' && candidate.md5.length > 0) {
+      attachment.md5 = candidate.md5;
+    }
+    if (typeof candidate.msg_path === 'string' && candidate.msg_path.length > 0) {
+      attachment.msg_path = candidate.msg_path;
+    }
+    if (typeof candidate.part_id === 'string' && candidate.part_id.length > 0) {
+      attachment.part_id = candidate.part_id;
+    }
+    if (typeof candidate.is_cms === 'boolean') {
+      attachment.is_cms = candidate.is_cms;
+    }
+
+    return attachment;
   });
 }
 
