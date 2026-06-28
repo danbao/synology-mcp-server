@@ -20,6 +20,7 @@ describe('redactSensitive', () => {
       token: 't',
       otp: 'o',
       otp_code: 'o',
+      otp_secret: 's',
       authorization: 'Bearer x',
       cookie: 'id=abc',
       'set-cookie': 'id=abc',
@@ -28,6 +29,7 @@ describe('redactSensitive', () => {
       api_key: 'k',
       bearer: 'b',
       mcp_auth_token: 'm',
+      syno_otp_secret: 's',
       auth_token: 'a',
       synotoken: 'x',
     };

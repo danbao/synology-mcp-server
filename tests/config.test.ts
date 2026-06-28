@@ -48,6 +48,7 @@ describe('loadConfig', () => {
     'SYNO_USERNAME',
     'SYNO_PASSWORD',
     'SYNO_OTP_CODE',
+    'SYNO_OTP_SECRET',
     'SYNO_TOKEN_TTL_MS',
     'SYNO_REQUEST_TIMEOUT_MS',
     'SYNO_ENABLE_DRIVE',
@@ -138,6 +139,36 @@ describe('loadConfig', () => {
       expect(cfg.mcp.httpPort).toBe(3100);
       expect(cfg.mcp.httpHost).toBe('127.0.0.1');
       expect(cfg.mcp.httpPath).toBe('/mcp');
+    } finally {
+      restore();
+    }
+  });
+
+  it('loads SYNO_OTP_SECRET when configured', async () => {
+    const restore = withEnv({
+      ...VALID_ENV,
+      SYNO_OTP_SECRET: 'GEZD GNBV GY3T QOJQ',
+    });
+    try {
+      const { loadConfig } = await import('../src/config.js?v=otp-secret');
+      const cfg = loadConfig();
+      expect(cfg.synology.otpSecret).toBe('GEZD GNBV GY3T QOJQ');
+    } finally {
+      restore();
+    }
+  });
+
+  it('preserves both OTP code and secret so auth can prefer the explicit code', async () => {
+    const restore = withEnv({
+      ...VALID_ENV,
+      SYNO_OTP_CODE: '123456',
+      SYNO_OTP_SECRET: 'GEZDGNBVGY3TQOJQ',
+    });
+    try {
+      const { loadConfig } = await import('../src/config.js?v=otp-code-secret');
+      const cfg = loadConfig();
+      expect(cfg.synology.otpCode).toBe('123456');
+      expect(cfg.synology.otpSecret).toBe('GEZDGNBVGY3TQOJQ');
     } finally {
       restore();
     }

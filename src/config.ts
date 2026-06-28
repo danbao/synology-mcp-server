@@ -57,6 +57,7 @@ const AppConfigSchema = z.object({
   SYNO_USERNAME: z.string().trim().min(1, 'SYNO_USERNAME is required'),
   SYNO_PASSWORD: z.string().min(1, 'SYNO_PASSWORD is required'),
   SYNO_OTP_CODE: z.string().optional(),
+  SYNO_OTP_SECRET: z.string().trim().optional(),
   SYNO_TOKEN_TTL_MS: envInt(82_800_000), // 23 hours
   SYNO_REQUEST_TIMEOUT_MS: envInt(30_000),
 
@@ -193,6 +194,7 @@ export function loadConfig(): AppConfig {
       username: env.SYNO_USERNAME,
       password: env.SYNO_PASSWORD,
       ...(env.SYNO_OTP_CODE ? { otpCode: env.SYNO_OTP_CODE } : {}),
+      ...(env.SYNO_OTP_SECRET ? { otpSecret: env.SYNO_OTP_SECRET } : {}),
       tokenTtlMs: env.SYNO_TOKEN_TTL_MS,
       requestTimeoutMs: env.SYNO_REQUEST_TIMEOUT_MS,
       spreadsheetHost,

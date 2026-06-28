@@ -10,6 +10,7 @@ import { TokenCache } from './token-cache.js';
 import { AuthError, NetworkError } from '../errors.js';
 import { mapSynologyError } from '../utils/synology-error-map.js';
 import { httpFetch, type FetchResponse } from '../utils/http-fetch.js';
+import { generateTotpCode } from '../utils/totp.js';
 
 /** Shape of a successful SYNO.API.Auth login response data object */
 interface AuthLoginData {
@@ -20,7 +21,13 @@ interface AuthLoginData {
 interface AuthResponse {
   success: boolean;
   data?: AuthLoginData;
-  error?: { code: number };
+  error?: {
+    code: number;
+    errors?: {
+      token?: string;
+      types?: Array<{ type?: string }>;
+    };
+  };
 }
 
 /**
@@ -131,6 +138,16 @@ export class AuthManager {
 
     if (!payload.success) {
       const code = payload.error?.code ?? 100;
+      const has2faChallenge =
+        code === 403 &&
+        Array.isArray(payload.error?.errors?.types) &&
+        payload.error.errors.types.length > 0;
+      if (has2faChallenge) {
+        throw new AuthError(
+          '2FA verification required. Set SYNO_OTP_CODE for short-lived local debugging, set SYNO_OTP_SECRET to generate TOTP codes automatically, or use a dedicated DSM service account without 2FA for unattended MCP.',
+          code,
+        );
+      }
       // mapSynologyError returns SynologyMcpError; auth codes always yield AuthError
       throw mapSynologyError(code, 'SYNO.API.Auth');
     }
@@ -162,12 +179,28 @@ export class AuthManager {
       format: 'sid',
     });
 
-    // Only append otp_code when the user has configured 2FA
-    if (this.config.otpCode) {
-      body.set('otp_code', this.config.otpCode);
+    const otpCode = this.resolveOtpCode();
+    if (otpCode) {
+      body.set('otp_code', otpCode);
     }
 
     return { url, body };
+  }
+
+  private resolveOtpCode(): string | undefined {
+    if (this.config.otpCode) {
+      return this.config.otpCode;
+    }
+    if (!this.config.otpSecret) {
+      return undefined;
+    }
+
+    try {
+      return generateTotpCode(this.config.otpSecret);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new AuthError(`Invalid SYNO_OTP_SECRET: ${msg}`);
+    }
   }
 
   /**

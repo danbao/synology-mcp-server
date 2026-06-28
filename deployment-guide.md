@@ -29,7 +29,7 @@ SYNO_PASSWORD=your_nas_password
 ```
 
 > [!IMPORTANT]
-> If your NAS uses a self-signed TLS certificate, set `SYNO_IGNORE_CERT=true` only on trusted home networks. For unattended automation, prefer a dedicated low-privilege DSM service account; Spreadsheet automation should avoid 2FA accounts because the Spreadsheet API does not accept OTP.
+> If your NAS uses a self-signed TLS certificate, set `SYNO_IGNORE_CERT=true` only on trusted home networks. For unattended automation, prefer a dedicated low-privilege DSM service account without 2FA; DSM session login can use `SYNO_OTP_SECRET`, but Spreadsheet automation still cannot because the Spreadsheet API does not accept OTP.
 
 ### Choosing the transport
 
@@ -442,7 +442,7 @@ Always read [`CHANGELOG.md`](./CHANGELOG.md) before upgrading across a minor ver
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | `Failed to reach Synology NAS` | Wrong `SYNO_HOST` / `SYNO_PORT` / firewall | `curl -k https://$SYNO_HOST:$SYNO_PORT` |
-| `AUTH_FAILED` (synoCode `400`/`401`) | Wrong credentials, or 2FA/OTP mismatch | Use a dedicated low-privilege DSM service account |
+| `AUTH_FAILED` (synoCode `400`/`401`) | Wrong credentials, or 2FA/OTP mismatch | Check `SYNO_OTP_CODE` / `SYNO_OTP_SECRET`, or use a dedicated low-privilege DSM service account |
 | `AUTH_FAILED` (synoCode `407`) | IP blocked by DSM auto-block | Control Panel → Security → Auto Block → unblock |
 | TLS / cert errors | Self-signed NAS cert | `SYNO_IGNORE_CERT=true` (trusted networks only) |
 | `MCP_AUTH_TOKEN is required` | Streamable HTTP enabled without token | Set `MCP_AUTH_TOKEN` |

@@ -13,6 +13,7 @@ const SENSITIVE_KEYS = new Set([
   'token',
   'otp',
   'otp_code',
+  'otp_secret',
   'authorization',
   'cookie',
   'set-cookie',
@@ -21,6 +22,7 @@ const SENSITIVE_KEYS = new Set([
   'api_key',
   'bearer',
   'mcp_auth_token',
+  'syno_otp_secret',
   'auth_token',
   'synotoken',
 ]);

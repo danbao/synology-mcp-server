@@ -8,6 +8,9 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+- `SYNO_OTP_SECRET` can generate DSM TOTP login codes automatically, while `SYNO_OTP_CODE` remains available for short-lived manual debugging.
+
 ---
 
 ## [0.6.0] - 2026-06-28

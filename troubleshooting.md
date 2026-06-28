@@ -17,7 +17,7 @@ When a Synology API call fails, the error includes a numeric `synoCode`. Common 
 | `401` | Guest account disabled | Enable the account in DSM Control Panel > User |
 | `403` | Permission denied | User lacks permission for this operation; check DSM user privileges |
 | `404` | File not found | Path does not exist in Drive; verify with `drive_list_files` |
-| `406` | OTP code required | 2FA is enabled; set `SYNO_OTP_CODE`, or create a dedicated service account without 2FA (DSM has no "Application Password" feature) |
+| `406` | OTP code required | 2FA is enabled; set `SYNO_OTP_CODE` or `SYNO_OTP_SECRET`, or create a dedicated service account without 2FA (DSM has no "Application Password" feature) |
 
 ---
 
@@ -100,7 +100,7 @@ node dist/index.js
 ## Authentication Loop / Repeated Login Failures
 
 1. Verify credentials manually: open `https://YOUR_NAS:5001` in a browser and log in
-2. If 2FA is active, prefer a dedicated DSM service account **without 2FA enabled** — DSM does NOT offer "Application Passwords" despite what some third-party docs imply, and `SYNO_OTP_CODE` only handles the initial login (and not at all for the Spreadsheet container, which rejects OTP)
+2. If 2FA is active, prefer a dedicated DSM service account **without 2FA enabled**. For DSM session login only, use `SYNO_OTP_CODE` for a manual short-lived code or `SYNO_OTP_SECRET` for automatic TOTP generation. The Spreadsheet container still rejects OTP.
 3. Check `LOG_LEVEL=debug` output for the exact error code returned by `SYNO.API.Auth`
 
 ---
@@ -141,7 +141,7 @@ These settings only affect the container's back-call; `SYNO_HTTPS` / `SYNO_PORT`
 1. Docker bridge subnet cannot reach DSM (firewall) — check DSM Control Panel → Security → Firewall, allow `172.17.0.0/16`
 2. DSM auto-block hit the container IP — Control Panel → Security → Account → Block List, unblock + whitelist Docker subnet
 3. User lacks Synology Office privilege — Control Panel → Application Privileges → Synology Office
-4. 2FA-enabled account — endpoint does not accept OTP; use a dedicated non-2FA service account
+4. 2FA-enabled account — endpoint does not accept `SYNO_OTP_CODE` or `SYNO_OTP_SECRET`; use a dedicated non-2FA service account
 
 ---
 
