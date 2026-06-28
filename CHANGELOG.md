@@ -10,6 +10,25 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ---
 
+## [0.6.2] - 2026-06-29
+
+### Fixed
+- Updated Drive write operations to the current Synology Drive API request shapes, including upload/download-by-id fallback, create folder, move/rename, delete task polling, labels, and sharing links.
+- Updated Calendar operations to `SYNO.Cal.Event` v6 request/response shapes.
+- Updated MailPlus tools to the current `SYNO.MailClient.*` APIs for folders, threads/messages, attachments, draft send, mark, and move operations.
+- Added Spreadsheet service-account auth handling via `SYNO_SS_USERNAME` / `SYNO_SS_PASSWORD` for OTP-protected DSM accounts, with a local preflight error before hitting `/spreadsheets/authorize`.
+
+### Added
+- Real-NAS smoke scripts for MCP stdio and direct `synology/spreadsheet-api` validation.
+- Interface matrix documenting MCP tool to Synology API/version/request-shape mapping.
+- Spreadsheet tool tests for batch update, sheet rename/delete, get styles, and register flows.
+
+### Verified
+- `pnpm typecheck`, `pnpm lint`, `pnpm test` (360 tests), `pnpm build`, Docker build, and compose config checks pass.
+- Real DSM smoke: `pnpm smoke:spreadsheet`, `pnpm smoke:write`, and `pnpm smoke:readonly` passed with only environment/data-availability skips.
+
+---
+
 ## [0.6.1] - 2026-06-28
 
 ### Added
@@ -306,7 +325,8 @@ DSM 7.3.2 returned error 102 ("API does not exist") for legacy namespaces. Renam
 
 ---
 
-[Unreleased]: https://github.com/danbao/synology-mcp-server/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/danbao/synology-mcp-server/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/danbao/synology-mcp-server/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/danbao/synology-mcp-server/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/danbao/synology-mcp-server/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/danbao/synology-mcp-server/releases/tag/v0.5.0

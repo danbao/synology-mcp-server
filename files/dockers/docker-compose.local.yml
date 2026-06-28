@@ -8,7 +8,7 @@
 
 services:
   synology-mcp:
-    image: ghcr.io/danbao/synology-office-mcp:0.6.1
+    image: ghcr.io/danbao/synology-office-mcp:0.6.2
     build:
       context: ../..
       dockerfile: files/dockers/Dockerfile

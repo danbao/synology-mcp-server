@@ -12,7 +12,7 @@ Visit [landing page](https://synology-mcp-server.smb-base.com/).
 
 Wraps the official [Synology Office Suite REST API](https://office-suite-api.synology.com). LAN-only by default — no data leaves your network unless you explicitly opt in.
 
-> **v0.6.1 milestone** — All four modules are wired, with stdio plus Streamable HTTP transport for LAN/Docker deployments. Smoke tests against a real DSM 7.2.2 NAS are still recommended before declaring v1.0.0 production-ready. See [CHANGELOG](./CHANGELOG.md) for details.
+> **v0.6.2 milestone** — All four modules are wired, with stdio plus Streamable HTTP transport for LAN/Docker deployments. Smoke tests against a real DSM 7.2.2 NAS are still recommended before declaring v1.0.0 production-ready. See [CHANGELOG](./CHANGELOG.md) for details.
 
 ---
 

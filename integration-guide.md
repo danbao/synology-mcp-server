@@ -114,7 +114,7 @@ Docker variant — useful if you don't want Node on the host:
       "args": [
         "run", "--rm", "-i",
         "--env-file", "${ENV_FILE}",
-        "ghcr.io/danbao/synology-office-mcp:0.6.1"
+        "ghcr.io/danbao/synology-office-mcp:0.6.2"
       ]
     }
   }
