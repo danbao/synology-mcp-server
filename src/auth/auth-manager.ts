@@ -146,7 +146,7 @@ export class AuthManager {
         code === 403 &&
         Array.isArray(payload.error?.errors?.types) &&
         payload.error.errors.types.length > 0;
-      if (has2faChallenge) {
+      if (has2faChallenge || code === 404 || code === 407) {
         throw new AuthError(
           '2FA verification required. Set SYNO_OTP_CODE for short-lived local debugging, set SYNO_OTP_SECRET to generate TOTP codes automatically, or use a dedicated DSM service account without 2FA for unattended MCP.',
           code,

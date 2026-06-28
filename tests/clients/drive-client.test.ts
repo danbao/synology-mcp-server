@@ -5,14 +5,17 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { setupServer } from 'msw/node';
-import { allHandlers } from '../mocks/synology-handlers.js';
+import { allHandlers, clearDsmRequestLog, dsmRequestLog } from '../mocks/synology-handlers.js';
 import { createTestDriveClient } from '../mocks/test-client-factory.js';
-import { NotFoundError } from '../../src/errors.js';
+import { NetworkError, NotFoundError } from '../../src/errors.js';
 
 const server = setupServer(...allHandlers);
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  clearDsmRequestLog();
+});
 afterAll(() => server.close());
 
 describe('DriveClient.listFiles', () => {
@@ -32,6 +35,14 @@ describe('DriveClient.listFiles', () => {
     expect(result.files[0]?.type).toBe('file');
     expect(result.files[0]?.extension).toBe('osheet');
     expect(result.files[1]?.type).toBe('dir');
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.SynologyDrive.Files',
+      version: '2',
+      method: 'list',
+      httpMethod: 'GET',
+      source: 'query',
+      params: expect.objectContaining({ path: '/mydrive', limit: '100' }),
+    });
   });
 });
 
@@ -72,6 +83,19 @@ describe('DriveClient.upload', () => {
     expect(result.success).toBe(true);
     expect(result.file_id).toBe('new-file-001');
     expect(result.file_name).toBe('test.txt');
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.SynologyDrive.Files',
+      version: '2',
+      method: 'upload',
+      httpMethod: 'POST',
+      source: 'multipart',
+      params: expect.objectContaining({
+        path: '/mydrive/uploads/test.txt',
+        type: 'file',
+        conflict_action: 'version',
+        file: 'test.txt',
+      }),
+    });
   });
 });
 
@@ -125,6 +149,18 @@ describe('DriveClient.createFolder', () => {
     });
     expect(result.success).toBe(true);
     expect(result.folder_id).toBe('dir-new');
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.SynologyDrive.Files',
+      version: '2',
+      method: 'create',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({
+        path: '/mydrive/projects/new-folder',
+        type: 'folder',
+        conflict_action: 'version',
+      }),
+    });
   });
 });
 
@@ -134,11 +170,35 @@ describe('DriveClient.move', () => {
     const result = await client.move({
       path: '/mydrive/report.osheet',
       dest_folder_path: '/mydrive/dest',
+      new_name: 'renamed.osheet',
       conflict_action: 'autorename',
     });
     expect(result.success).toBe(true);
-    expect(result.new_path).toBe('/mydrive/dest/report.osheet');
+    expect(result.new_path).toBe('/mydrive/dest/renamed.osheet');
     expect(result.dry_run).toBe(false);
+    expect(dsmRequestLog.at(-2)).toMatchObject({
+      api: 'SYNO.SynologyDrive.Files',
+      version: '2',
+      method: 'move',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({
+        files: '["id:file-001"]',
+        to_parent_folder: 'id:dir-dest',
+        dry_run: 'false',
+      }),
+    });
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.SynologyDrive.Files',
+      version: '2',
+      method: 'update',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({
+        path: 'id:file-001',
+        name: 'renamed.osheet',
+      }),
+    });
   });
 
   it('throws NotFoundError for missing source', async () => {
@@ -158,6 +218,43 @@ describe('DriveClient.delete', () => {
     const client = createTestDriveClient();
     const result = await client.delete({ path: '/mydrive/report.osheet', permanent: false });
     expect(result.success).toBe(true);
+    const deleteRequest = dsmRequestLog.find(
+      (entry) => entry.api === 'SYNO.SynologyDrive.Files' && entry.method === 'delete',
+    );
+    expect(deleteRequest).toMatchObject({
+      api: 'SYNO.SynologyDrive.Files',
+      version: '10',
+      method: 'delete',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({ files: '["id:file-001"]', permanent: 'false' }),
+    });
+    expect(
+      dsmRequestLog.find(
+        (entry) => entry.api === 'SYNO.Entry.Request' && entry.method === 'request',
+      ),
+    ).toMatchObject({
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({
+        compound: expect.stringContaining('SYNO.SynologyDrive.Tasks'),
+      }),
+    });
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.SynologyDrive.Files',
+      version: '2',
+      method: 'get',
+      httpMethod: 'GET',
+      source: 'query',
+      params: expect.objectContaining({ path: '/mydrive/report.osheet' }),
+    });
+  });
+
+  it('surfaces async task errors for unsupported permanent delete', async () => {
+    const client = createTestDriveClient();
+    await expect(client.delete({ path: '/mydrive/report.osheet', permanent: true })).rejects.toThrow(
+      NetworkError,
+    );
   });
 
   it('throws NotFoundError for missing file', async () => {
@@ -175,6 +272,13 @@ describe('DriveClient.listLabels', () => {
     expect(labels).toHaveLength(1);
     expect(labels[0]?.name).toBe('Important');
     expect(labels[0]?.color).toBe('red');
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.SynologyDrive.Labels',
+      version: '3',
+      method: 'list',
+      httpMethod: 'GET',
+      source: 'query',
+    });
   });
 });
 
@@ -186,6 +290,17 @@ describe('DriveClient.addLabel', () => {
       label_name: 'Important',
     });
     expect(result.success).toBe(true);
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.SynologyDrive.Files',
+      version: '2',
+      method: 'label',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({
+        files: '["id:file-001"]',
+        labels: '[{"action":"add","label_id":"label-1"}]',
+      }),
+    });
   });
 });
 
@@ -199,5 +314,13 @@ describe('DriveClient.getSharingLink', () => {
     expect(result.link).toContain('https://');
     expect(result.permission).toBe('view');
     expect(result.expires_at).toBeNull();
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.SynologyDrive.Sharing',
+      version: '1',
+      method: 'create_link',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({ path: 'id:file-001' }),
+    });
   });
 });

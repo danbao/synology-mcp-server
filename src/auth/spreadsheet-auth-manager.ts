@@ -93,7 +93,7 @@ export class SpreadsheetAuthManager {
       const init: Record<string, unknown> = {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         signal: AbortSignal.timeout(this.config.requestTimeoutMs),
@@ -110,10 +110,19 @@ export class SpreadsheetAuthManager {
 
   /** Performs a login request and stores the returned JWT in the cache. */
   private async login(): Promise<string> {
+    if ((this.config.otpCode || this.config.otpSecret) && !this.config.spreadsheetUsername) {
+      throw new AuthError(
+        'Spreadsheet API auth requires SYNO_SS_USERNAME/SYNO_SS_PASSWORD when the main DSM account uses OTP. ' +
+          'The synology/spreadsheet-api /spreadsheets/authorize endpoint accepts only username/password/host/protocol and cannot consume SYNO_OTP_CODE or SYNO_OTP_SECRET.',
+      );
+    }
+
     const url = this.buildBaseUrl() + '/spreadsheets/authorize';
+    const username = this.config.spreadsheetUsername ?? this.config.username;
+    const password = this.config.spreadsheetPassword ?? this.config.password;
     const body = JSON.stringify({
-      username: this.config.username,
-      password: this.config.password,
+      username,
+      password,
       host: this.buildDsmHostField(),
       protocol: this.config.spreadsheetDsmHttps ? 'https' : 'http',
     });
@@ -148,13 +157,13 @@ export class SpreadsheetAuthManager {
       const dsmTarget = `${this.config.spreadsheetDsmHttps ? 'https' : 'http'}://${this.buildDsmHostField()}`;
       const hint =
         response.status === 401
-          ? ` — Spreadsheet container could not authenticate '${this.config.username}' against DSM at ${dsmTarget}. ` +
+          ? ` — Spreadsheet container could not authenticate '${username}' against DSM at ${dsmTarget}. ` +
             `Common causes (most frequent first): ` +
             `(1) container rejects DSM's self-signed TLS cert — point SYNO_SS_DSM_HTTPS=false / SYNO_SS_DSM_PORT=<DSM HTTP port> to back-call over HTTP; ` +
             `(2) the container cannot reach DSM at that URL (Docker network / firewall / wrong host); ` +
             `(3) DSM auto-block triggered against the container's source IP — unblock and whitelist the Docker subnet; ` +
             `(4) the user lacks Synology Office / Spreadsheet privilege (Control Panel → Application Privileges); ` +
-            `(5) wrong DSM credentials. NOTE: the /spreadsheets/authorize endpoint does not accept OTP — for 2FA accounts, use a dedicated service account without 2FA.`
+            `(5) wrong DSM credentials. NOTE: the /spreadsheets/authorize endpoint does not accept OTP — for 2FA accounts, set SYNO_SS_USERNAME/SYNO_SS_PASSWORD to a dedicated service account without 2FA.`
           : '';
       throw new AuthError(`Spreadsheet API auth failed: ${detail}${hint}`);
     }

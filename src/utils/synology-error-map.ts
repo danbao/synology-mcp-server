@@ -57,6 +57,11 @@ const ERROR_MAP: Record<number, ErrorMapEntry> = {
     factory: (c) => new AuthError('SID not found — re-login required', c),
     message: 'SID not found — re-login required',
   },
+  120: {
+    factory: (c) =>
+      new SynologyMcpError('SYNO_INVALID_REQUEST', 'Invalid request or resource', c),
+    message: 'Invalid request or resource',
+  },
   400: {
     factory: (c) => new AuthError('Account does not exist or bad password', c),
     message: 'Account does not exist or bad password',
@@ -77,9 +82,17 @@ const ERROR_MAP: Record<number, ErrorMapEntry> = {
     factory: (c) => new AuthError('2FA enrollment required', c),
     message: '2FA enrollment required',
   },
+  407: {
+    factory: (c) => new AuthError('Invalid 2FA code', c),
+    message: 'Invalid 2FA code',
+  },
   408: {
     factory: (c) => new NotFoundError('File not found', c),
     message: 'File not found',
+  },
+  1003: {
+    factory: (c) => new NotFoundError('File information not found', c),
+    message: 'File information not found',
   },
   414: {
     factory: (c) => new PermissionError('No write permission', c),

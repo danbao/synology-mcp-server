@@ -49,6 +49,14 @@ describe('loadConfig', () => {
     'SYNO_PASSWORD',
     'SYNO_OTP_CODE',
     'SYNO_OTP_SECRET',
+    'SYNO_SS_HOST',
+    'SYNO_SS_PORT',
+    'SYNO_SS_HTTPS',
+    'SYNO_SS_DSM_HOST',
+    'SYNO_SS_DSM_PORT',
+    'SYNO_SS_DSM_HTTPS',
+    'SYNO_SS_USERNAME',
+    'SYNO_SS_PASSWORD',
     'SYNO_TOKEN_TTL_MS',
     'SYNO_REQUEST_TIMEOUT_MS',
     'SYNO_ENABLE_DRIVE',
@@ -244,6 +252,41 @@ describe('loadConfig', () => {
     try {
       const { loadConfig } = await import('../src/config.js?v=sse-rejected');
       expect(() => loadConfig()).toThrow(/streamable-http/);
+    } finally {
+      restore();
+    }
+  });
+
+  it('loads dedicated Spreadsheet service account credentials', async () => {
+    const restore = withEnv({
+      ...VALID_ENV,
+      SYNO_SS_USERNAME: 'office-bot',
+      SYNO_SS_PASSWORD: 'office-secret',
+      SYNO_SS_DSM_HOST: '10.0.0.10',
+      SYNO_SS_DSM_PORT: '5000',
+      SYNO_SS_DSM_HTTPS: 'false',
+    });
+    try {
+      const { loadConfig } = await import('../src/config.js?v=spreadsheet-service-account');
+      const cfg = loadConfig();
+      expect(cfg.synology.spreadsheetUsername).toBe('office-bot');
+      expect(cfg.synology.spreadsheetPassword).toBe('office-secret');
+      expect(cfg.synology.spreadsheetDsmHost).toBe('10.0.0.10');
+      expect(cfg.synology.spreadsheetDsmPort).toBe(5000);
+      expect(cfg.synology.spreadsheetDsmHttps).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it('rejects partial dedicated Spreadsheet credentials', async () => {
+    const restore = withEnv({
+      ...VALID_ENV,
+      SYNO_SS_USERNAME: 'office-bot',
+    });
+    try {
+      const { loadConfig } = await import('../src/config.js?v=spreadsheet-partial-creds');
+      expect(() => loadConfig()).toThrow(ValidationError);
     } finally {
       restore();
     }

@@ -133,8 +133,20 @@ describe('MailPlusClient.send', () => {
     });
     expect(result.message_id).toBe('sent-msg-001');
     expect(result.sent_at).toBe(1700001000);
+    expect(mailplusRequestLog).toContainEqual(
+      expect.objectContaining({
+        api: 'SYNO.MailClient.Setting.SMTP',
+        method: 'list',
+        version: '2',
+      }),
+    );
     expect(mailplusRequestLog.filter((entry) => entry.api === 'SYNO.MailClient.Draft')).toEqual([
-      expect.objectContaining({ method: 'create', version: '6', source: 'form' }),
+      expect.objectContaining({
+        method: 'create',
+        version: '6',
+        source: 'form',
+        params: expect.objectContaining({ from: 'sender@example.com' }),
+      }),
       expect.objectContaining({ method: 'send', version: '6', source: 'form' }),
     ]);
   });

@@ -229,6 +229,18 @@ interface SynoDraftSendResponse {
   message?: { id?: string | number; date?: number; sent_at?: number };
 }
 
+interface SynoSmtpAccount {
+  id?: string | number;
+  mail?: string;
+  email?: string;
+  address?: string;
+}
+
+interface SynoSmtpListResponse {
+  smtp?: SynoSmtpAccount[];
+  smtp_default_id?: string | number;
+}
+
 // ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
@@ -242,6 +254,7 @@ export class MailPlusClient extends BaseClient {
   private _available: boolean | undefined = undefined;
   private readonly availabilityTimeoutMs: number;
   private readonly mailboxIdCache = new Map<string, string>();
+  private defaultFromAddress: string | undefined;
 
   constructor(config: SynologyConfig, authManager: AuthManager) {
     super(config, authManager);
@@ -251,6 +264,7 @@ export class MailPlusClient extends BaseClient {
   private async mailplusFormPost<T>(
     params: Record<string, MailPlusParamValue>,
     retryOn401 = true,
+    allowEmptyData = false,
   ): Promise<T> {
     const sid = await this.authManager.getToken();
     const body = buildMailPlusFormBody(params);
@@ -259,7 +273,8 @@ export class MailPlusClient extends BaseClient {
       body,
     });
     return await this.unwrapMailPlusEnvelope<T>(response, params, retryOn401, () =>
-      this.mailplusFormPost<T>(params, false),
+      this.mailplusFormPost<T>(params, false, allowEmptyData),
+      allowEmptyData,
     );
   }
 
@@ -267,6 +282,7 @@ export class MailPlusClient extends BaseClient {
     params: Record<string, MailPlusParamValue>,
     form: FormData,
     retryOn401 = true,
+    allowEmptyData = false,
   ): Promise<T> {
     for (const [key, value] of Object.entries(params)) {
       const serialized = serializeMailPlusParam(value);
@@ -282,7 +298,8 @@ export class MailPlusClient extends BaseClient {
       body: form.getBuffer(),
     });
     return await this.unwrapMailPlusEnvelope<T>(response, params, retryOn401, () =>
-      this.mailplusMultipartPost<T>(params, form, false),
+      this.mailplusMultipartPost<T>(params, form, false, allowEmptyData),
+      allowEmptyData,
     );
   }
 
@@ -315,6 +332,7 @@ export class MailPlusClient extends BaseClient {
     params: Record<string, MailPlusParamValue>,
     retryOn401: boolean,
     retry: () => Promise<T>,
+    allowEmptyData: boolean,
   ): Promise<T> {
     if (response.status === 401) {
       if (retryOn401) {
@@ -342,6 +360,10 @@ export class MailPlusClient extends BaseClient {
         return await retry();
       }
       throw mapSynologyError(code, mailPlusApiName(params));
+    }
+
+    if (envelope.data === undefined && allowEmptyData) {
+      return {} as T;
     }
 
     if (envelope.data === undefined) {
@@ -390,15 +412,31 @@ export class MailPlusClient extends BaseClient {
    *
    * @param account - Optional email account; defaults to user's primary.
    */
-  listFolders(account?: string): Promise<SynoMailFolder[]> {
+  async listFolders(account?: string): Promise<SynoMailFolder[]> {
     const params: Record<string, string | number | boolean> = {
       api: 'SYNO.MailClient.Mailbox',
-      version: 1,
+      version: 7,
       method: 'list',
+      conversation_view: true,
     };
     if (account !== undefined) params['account'] = account;
 
-    return this.request<SynoMailFolder[]>({ endpoint: ENTRY, method: 'GET', params });
+    const response = await this.request<
+      SynoMailClientMailboxListResponse | SynoMailClientMailbox[]
+    >({
+      endpoint: ENTRY,
+      method: 'GET',
+      params,
+    });
+    const mailboxes = Array.isArray(response) ? response : (response.mailbox ?? []);
+    return mailboxes.map((mailbox) => ({
+      id: String(mailbox.id),
+      name: mailbox.name ?? mailbox.path ?? String(mailbox.id),
+      path: mailbox.path ?? mailbox.name ?? String(mailbox.id),
+      unread: 0,
+      total: 0,
+      has_children: false,
+    }));
   }
 
   /**
@@ -597,7 +635,7 @@ export class MailPlusClient extends BaseClient {
         api: 'SYNO.MailClient.Message',
         version: 10,
         method: 'get',
-        id: JSON.stringify([opts.message_id]),
+        id: JSON.stringify(mailplusIdList([opts.message_id])),
         additional: JSON.stringify(['blockquote', 'truncated', 'block_external_image']),
       },
     });
@@ -698,6 +736,7 @@ export class MailPlusClient extends BaseClient {
    */
   async send(opts: SendMessageOpts): Promise<SynoSendResult> {
     const attachmentIds = await this.uploadAttachments(opts.attachments ?? []);
+    const from = await this.resolveSendFrom(opts.account);
     const draft = await this.mailplusFormPost<SynoDraftCreateResponse>({
       api: 'SYNO.MailClient.Draft',
       version: 6,
@@ -709,7 +748,7 @@ export class MailPlusClient extends BaseClient {
       cc: opts.cc,
       bcc: opts.bcc,
       attachment: attachmentIds.length > 0 ? attachmentIds : undefined,
-      from: opts.account,
+      from,
     });
 
     const draftId = extractDraftId(draft);
@@ -755,6 +794,32 @@ export class MailPlusClient extends BaseClient {
     return ids;
   }
 
+  private async resolveSendFrom(account: string | undefined): Promise<string> {
+    if (account !== undefined && account.length > 0) return account;
+    if (this.defaultFromAddress !== undefined) return this.defaultFromAddress;
+
+    const raw = await this.request<SynoSmtpListResponse>({
+      endpoint: ENTRY,
+      params: {
+        api: 'SYNO.MailClient.Setting.SMTP',
+        version: 2,
+        method: 'list',
+      },
+    });
+    const accounts = raw.smtp ?? [];
+    const defaultId = primitiveToString(raw.smtp_default_id);
+    const selected =
+      accounts.find((item) => defaultId.length > 0 && primitiveToString(item.id) === defaultId) ??
+      accounts[0];
+    const address = primitiveToString(selected?.mail ?? selected?.email ?? selected?.address);
+    if (address.length === 0) {
+      throw new NetworkError('MailPlus has no default SMTP sender account configured');
+    }
+
+    this.defaultFromAddress = address;
+    return address;
+  }
+
   /**
    * Mark messages as read/unread/flagged/unflagged.
    *
@@ -771,12 +836,12 @@ export class MailPlusClient extends BaseClient {
       api: 'SYNO.MailClient.Message',
       version: 10,
       method,
-      id: opts.message_ids,
+      id: mailplusIdList(opts.message_ids),
       ...valueParam,
     };
     if (opts.account !== undefined) params['account'] = opts.account;
 
-    await this.mailplusFormPost<unknown>(params);
+    await this.mailplusFormPost<Record<string, never>>(params, true, true);
   }
 
   /**
@@ -790,12 +855,12 @@ export class MailPlusClient extends BaseClient {
       api: 'SYNO.MailClient.Message',
       version: 10,
       method: 'set_mailbox',
-      id: opts.message_ids,
+      id: mailplusIdList(opts.message_ids),
       mailbox_id: mailboxId,
     };
     if (opts.account !== undefined) params['account'] = opts.account;
 
-    await this.mailplusFormPost<unknown>(params);
+    await this.mailplusFormPost<Record<string, never>>(params, true, true);
   }
 }
 
@@ -818,6 +883,10 @@ function serializeMailPlusParam(value: MailPlusParamValue): string | undefined {
 function mailPlusApiName(params: Record<string, MailPlusParamValue>): string {
   const api = params['api'];
   return typeof api === 'string' ? api : 'SYNO.MailClient';
+}
+
+function mailplusIdList(ids: string[]): Array<string | number> {
+  return ids.map((id) => (/^-?\d+$/.test(id) ? Number(id) : id));
 }
 
 function extractUploadedAttachmentId(response: SynoAttachmentUploadResponse): string {

@@ -31,6 +31,10 @@ export interface SynologyConfig {
   spreadsheetPort: number;
   /** Use HTTPS for Spreadsheet API (usually false for local Docker container) */
   spreadsheetHttps: boolean;
+  /** Optional DSM account used only by the Spreadsheet API container authorize flow. */
+  spreadsheetUsername?: string;
+  /** Password for spreadsheetUsername. Required when spreadsheetUsername is set. */
+  spreadsheetPassword?: string;
   /**
    * DSM host the Spreadsheet container should back-call to validate
    * credentials (sent as `host` field in `/spreadsheets/authorize` body).

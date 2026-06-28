@@ -4,12 +4,15 @@
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import { setupServer } from 'msw/node';
-import { allHandlers } from '../mocks/synology-handlers.js';
+import { allHandlers, clearDsmRequestLog, dsmRequestLog } from '../mocks/synology-handlers.js';
 import { createTestCalendarClient } from '../mocks/test-client-factory.js';
 
 const server = setupServer(...allHandlers);
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  clearDsmRequestLog();
+});
 afterAll(() => server.close());
 
 describe('CalendarClient.listCalendars', () => {
@@ -27,6 +30,18 @@ describe('CalendarClient.listEvents', () => {
     const result = await client.listEvents({ start_unix: 1700000000, end_unix: 1700086400 });
     expect(result.total).toBe(1);
     expect(result.events[0]).toMatchObject({ evt_id: 'evt-001', cal_id: 'cal-001' });
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.Cal.Event',
+      version: '6',
+      method: 'list',
+      httpMethod: 'GET',
+      source: 'query',
+      params: expect.objectContaining({
+        start: '1700000000',
+        end: '1700086400',
+        limit: '100',
+      }),
+    });
   });
 
   it('accepts optional calendar_id param', async () => {
@@ -37,6 +52,7 @@ describe('CalendarClient.listEvents', () => {
       end_unix: 1700086400,
     });
     expect(result.events.length).toBeGreaterThan(0);
+    expect(dsmRequestLog.at(-1)?.params).toMatchObject({ cal_id_list: '["cal-001"]' });
   });
 });
 
@@ -46,6 +62,15 @@ describe('CalendarClient.getEvent', () => {
     const result = await client.getEvent('evt-001', 'cal-001');
     expect(result.evt_id).toBe('evt-001');
     expect(result.title).toBe('Team Meeting');
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.Cal.Event',
+      version: '6',
+      method: 'get',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({ evt_id: '"evt-001"' }),
+    });
+    expect(dsmRequestLog.at(-1)?.params).not.toHaveProperty('cal_id');
   });
 
   it('throws on not-found event', async () => {
@@ -66,6 +91,24 @@ describe('CalendarClient.createEvent', () => {
     });
     expect(result.evt_id).toBe('evt-new-001');
     expect(result.cal_id).toBe('cal-001');
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.Cal.Event',
+      version: '6',
+      method: 'create',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({
+        cal_id: '"cal-001"',
+        original_cal_id: '"cal-001"',
+        summary: '"New Event"',
+        dtstart: '1700100000',
+        dtend: '1700103600',
+        is_all_day: 'false',
+        tz_id: '"Asia/Shanghai"',
+        participant: '[]',
+        notify_setting: '[]',
+      }),
+    });
   });
 
   it('accepts optional fields', async () => {
@@ -95,6 +138,19 @@ describe('CalendarClient.updateEvent', () => {
       title: 'Updated Title',
     });
     expect(result.evt_id).toBe('evt-001');
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.Cal.Event',
+      version: '6',
+      method: 'set',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({
+        evt_id: '"evt-001"',
+        cal_id: '"cal-001"',
+        summary: '"Updated Title"',
+        dav_etag: '"mock-etag-001"',
+      }),
+    });
   });
 });
 
@@ -102,6 +158,15 @@ describe('CalendarClient.deleteEvent', () => {
   it('resolves without error', async () => {
     const client = createTestCalendarClient();
     await expect(client.deleteEvent('evt-001', 'cal-001')).resolves.toBeDefined();
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.Cal.Event',
+      version: '6',
+      method: 'delete',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({ evt_id: '"evt-001"' }),
+    });
+    expect(dsmRequestLog.at(-1)?.params).not.toHaveProperty('cal_id');
   });
 });
 
@@ -110,6 +175,14 @@ describe('CalendarClient.createCalendar', () => {
     const client = createTestCalendarClient();
     const result = await client.createCalendar({ name: 'Work' });
     expect(result.cal_id).toBe('cal-new-001');
+    expect(dsmRequestLog.at(-1)).toMatchObject({
+      api: 'SYNO.Cal.Cal',
+      version: '5',
+      method: 'create',
+      httpMethod: 'POST',
+      source: 'form',
+      params: expect.objectContaining({ cal_displayname: '"Work"' }),
+    });
   });
 
   it('accepts optional color and description', async () => {

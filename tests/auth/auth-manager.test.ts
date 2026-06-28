@@ -144,6 +144,15 @@ describe('AuthManager.getToken', () => {
     await expect(mgr.getToken()).rejects.toThrow('SYNO_OTP_SECRET');
   });
 
+  it('surfaces invalid OTP responses clearly', async () => {
+    server.use(
+      http.post(AUTH_URL, () => HttpResponse.json({ success: false, error: { code: 407 } })),
+    );
+    const mgr = new AuthManager({ ...BASE_CONFIG, otpSecret: RFC_6238_SHA1_SECRET });
+    await expect(mgr.getToken()).rejects.toThrow('2FA verification required');
+    await expect(mgr.getToken()).rejects.toThrow('SYNO_OTP_SECRET');
+  });
+
   it('throws NetworkError when NAS unreachable', async () => {
     server.use(http.post(AUTH_URL, () => HttpResponse.error()));
     const mgr = new AuthManager(BASE_CONFIG);

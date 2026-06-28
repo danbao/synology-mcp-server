@@ -66,6 +66,8 @@ const AppConfigSchema = z.object({
   SYNO_SS_HOST: z.string().trim().optional(),
   SYNO_SS_PORT: envInt(3000),
   SYNO_SS_HTTPS: envBool(false),
+  SYNO_SS_USERNAME: z.string().trim().optional(),
+  SYNO_SS_PASSWORD: z.string().optional(),
 
   // DSM back-channel used by the Spreadsheet container to validate
   // credentials (the `host` / `protocol` fields in /spreadsheets/authorize).
@@ -170,6 +172,17 @@ export function loadConfig(): AppConfig {
     );
   }
 
+  if (
+    (env.SYNO_SS_USERNAME && !env.SYNO_SS_PASSWORD) ||
+    (!env.SYNO_SS_USERNAME && env.SYNO_SS_PASSWORD)
+  ) {
+    throw new ValidationError(
+      'SPREADSHEET_AUTH_CONFIG_INVALID',
+      'SYNO_SS_USERNAME and SYNO_SS_PASSWORD must be set together. ' +
+        'Use a dedicated DSM service account without 2FA for Spreadsheet API when the main DSM account uses OTP.',
+    );
+  }
+
   // Spreadsheet API endpoint defaults to the DSM host when SYNO_SS_HOST is unset.
   const spreadsheetHost =
     env.SYNO_SS_HOST !== undefined && env.SYNO_SS_HOST !== '' ? env.SYNO_SS_HOST : env.SYNO_HOST;
@@ -200,6 +213,8 @@ export function loadConfig(): AppConfig {
       spreadsheetHost,
       spreadsheetPort: env.SYNO_SS_PORT,
       spreadsheetHttps: env.SYNO_SS_HTTPS,
+      ...(env.SYNO_SS_USERNAME ? { spreadsheetUsername: env.SYNO_SS_USERNAME } : {}),
+      ...(env.SYNO_SS_PASSWORD ? { spreadsheetPassword: env.SYNO_SS_PASSWORD } : {}),
       spreadsheetDsmHost,
       spreadsheetDsmPort,
       spreadsheetDsmHttps,
