@@ -114,8 +114,20 @@ export class AuthManager {
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  /** Performs a login request and stores the returned sid in the cache. */
+  /**
+   * Performs a login request and stores the returned sid in the cache.
+   *
+   * When `otpSecret` is configured (TOTP auto-generation) and the first attempt
+   * fails with a 2FA error (codes 403/404/407), waits for the next TOTP time
+   * window (~30 s) and retries once. This handles clock-drift and window-boundary
+   * edge cases that cause sporadic OTP rejections in unattended deployments.
+   */
   private async login(): Promise<string> {
+    return this.attemptLogin(/* isRetry */ false);
+  }
+
+  /** Single login attempt; `isRetry` prevents infinite recursion. */
+  private async attemptLogin(isRetry: boolean): Promise<string> {
     const { url, body: formBody } = this.buildLoginRequest();
 
     let response: FetchResponse;
@@ -146,7 +158,20 @@ export class AuthManager {
         code === 403 &&
         Array.isArray(payload.error?.errors?.types) &&
         payload.error.errors.types.length > 0;
+
       if (has2faChallenge || code === 404 || code === 407) {
+        // When otpSecret is configured and this is the first attempt, the failure
+        // is likely a TOTP window-boundary miss. Wait for the next 30-second
+        // window and retry once with a freshly generated code.
+        if (!isRetry && this.config.otpSecret) {
+          const delayMs = this.msUntilNextTotpWindow();
+          process.stderr.write(
+            `[synology-mcp] TOTP rejected (code=${code}), retrying in ${delayMs}ms for next window\n`,
+          );
+          await this.sleep(delayMs);
+          return this.attemptLogin(/* isRetry */ true);
+        }
+
         throw new AuthError(
           '2FA verification required. Set SYNO_OTP_CODE for short-lived local debugging, set SYNO_OTP_SECRET to generate TOTP codes automatically, or use a dedicated DSM service account without 2FA for unattended MCP.',
           code,
@@ -163,6 +188,24 @@ export class AuthManager {
 
     this.cache.set(sid, this.config.tokenTtlMs);
     return sid;
+  }
+
+  /**
+   * Calculates the milliseconds until the start of the next TOTP 30-second window,
+   * plus a small buffer (2 s) to avoid hitting the exact boundary again.
+   */
+  private msUntilNextTotpWindow(): number {
+    const stepMs = 30_000;
+    const now = Date.now();
+    const elapsed = now % stepMs;
+    const remaining = stepMs - elapsed;
+    // Add 2 s buffer so the retry lands well inside the new window
+    return remaining + 2_000;
+  }
+
+  /** Resolves after `ms` milliseconds. */
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
