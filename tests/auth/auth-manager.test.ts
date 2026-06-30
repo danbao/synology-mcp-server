@@ -145,18 +145,62 @@ describe('AuthManager.getToken', () => {
   });
 
   it('surfaces invalid OTP responses clearly', async () => {
-    server.use(
-      http.post(AUTH_URL, () => HttpResponse.json({ success: false, error: { code: 407 } })),
-    );
-    const mgr = new AuthManager({ ...BASE_CONFIG, otpSecret: RFC_6238_SHA1_SECRET });
-    await expect(mgr.getToken()).rejects.toThrow('2FA verification required');
-    await expect(mgr.getToken()).rejects.toThrow('SYNO_OTP_SECRET');
+    vi.useFakeTimers();
+    try {
+      server.use(
+        http.post(AUTH_URL, () => HttpResponse.json({ success: false, error: { code: 407 } })),
+      );
+      const mgr = new AuthManager({ ...BASE_CONFIG, otpSecret: RFC_6238_SHA1_SECRET });
+
+      // With otpSecret configured, the first 407 triggers a retry after waiting
+      // for the next TOTP window. Advance fake timers so the sleep resolves.
+      const promise = mgr.getToken();
+      await Promise.all([
+        vi.advanceTimersByTimeAsync(35_000),
+        expect(promise).rejects.toThrow('2FA verification required'),
+      ]);
+
+      const promise2 = mgr.getToken();
+      await Promise.all([
+        vi.advanceTimersByTimeAsync(35_000),
+        expect(promise2).rejects.toThrow('SYNO_OTP_SECRET'),
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('throws NetworkError when NAS unreachable', async () => {
     server.use(http.post(AUTH_URL, () => HttpResponse.error()));
     const mgr = new AuthManager(BASE_CONFIG);
     await expect(mgr.getToken()).rejects.toThrow(NetworkError);
+  });
+
+  it('retries TOTP once on window boundary and succeeds on second attempt', async () => {
+    vi.useFakeTimers();
+    try {
+      let attempt = 0;
+      server.use(
+        http.post(AUTH_URL, () => {
+          attempt++;
+          if (attempt === 1) {
+            // First attempt: DSM rejects OTP (window boundary)
+            return HttpResponse.json({ success: false, error: { code: 407 } });
+          }
+          // Second attempt: fresh TOTP code accepted
+          return HttpResponse.json({ success: true, data: { sid: 'retry-sid-456' } });
+        }),
+      );
+      const mgr = new AuthManager({ ...BASE_CONFIG, otpSecret: RFC_6238_SHA1_SECRET });
+
+      const promise = mgr.getToken();
+      await vi.advanceTimersByTimeAsync(35_000);
+      const token = await promise;
+      expect(token).toBe('retry-sid-456');
+      expect(attempt).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
