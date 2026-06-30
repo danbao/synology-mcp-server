@@ -7,6 +7,8 @@ import { driveTools } from './drive/index.js';
 import { spreadsheetTools } from './spreadsheet/index.js';
 import { mailplusTools } from './mailplus/index.js';
 import { calendarTools } from './calendar/index.js';
+import { downloadStationTools } from './download-station/index.js';
+import { synologyListCapabilitiesTool } from './capabilities.js';
 import type { ToolDefinition } from './types.js';
 import type { FeatureFlags } from '../types/index.js';
 
@@ -17,7 +19,7 @@ import type { FeatureFlags } from '../types/index.js';
  * @returns Array of ToolDefinition ready for MCP server registration.
  */
 export function aggregateTools(features: FeatureFlags): ToolDefinition[] {
-  const tools: ToolDefinition[] = [];
+  const tools: ToolDefinition[] = [synologyListCapabilitiesTool];
 
   if (features.drive) {
     tools.push(...driveTools);
@@ -30,6 +32,9 @@ export function aggregateTools(features: FeatureFlags): ToolDefinition[] {
   }
   if (features.calendar) {
     tools.push(...calendarTools);
+  }
+  if (features.downloadStation) {
+    tools.push(...downloadStationTools);
   }
 
   return tools;

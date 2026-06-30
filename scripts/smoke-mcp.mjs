@@ -232,6 +232,13 @@ async function requiredStep(product, tool, fn) {
 }
 
 async function readonlySmoke(mcp, state) {
+  await step('synology', 'synology_list_capabilities', async () => {
+    const r = await mcp.callTool('synology_list_capabilities', {});
+    state.capabilities = r.modules ?? [];
+    const enabled = state.capabilities.filter((module) => module.enabled).length;
+    return `${enabled} enabled module(s), ${r.total_tools_enabled ?? 0} tool(s)`;
+  });
+
   await step('drive', 'drive_list_files', async () => {
     const r = await mcp.callTool('drive_list_files', { folder_path: '/mydrive', limit: 20 });
     state.driveFiles = r.files ?? [];
@@ -370,6 +377,22 @@ async function readonlySmoke(mcp, state) {
       return r.subject ?? state.mailMessages[0].id;
     });
   }
+
+  await step('download', 'download_list_tasks', async () => {
+    const r = await mcp.callTool('download_list_tasks', { limit: 20 });
+    state.downloadTasks = r.tasks ?? [];
+    return `${r.total ?? state.downloadTasks.length} task(s)`;
+  });
+
+  if (state.downloadTasks?.[0]?.id) {
+    await step('download', 'download_get_task', async () => {
+      const r = await mcp.callTool('download_get_task', {
+        task_ids: [state.downloadTasks[0].id],
+        additional: ['detail', 'transfer', 'file'],
+      });
+      return r.tasks?.[0]?.title ?? state.downloadTasks[0].id;
+    });
+  }
 }
 
 async function writeSmoke(mcp, state) {
@@ -377,6 +400,7 @@ async function writeSmoke(mcp, state) {
   await spreadsheetWriteSmoke(mcp, state);
   await calendarWriteSmoke(mcp, state);
   await mailplusWriteSmoke(mcp);
+  await downloadStationWriteSmoke(mcp);
 }
 
 async function driveWriteSmoke(mcp, state) {
@@ -746,6 +770,90 @@ async function mailplusWriteSmoke(mcp) {
     });
     return 'Trash';
   });
+}
+
+async function downloadStationWriteSmoke(mcp) {
+  const uri = env.SMOKE_DOWNLOAD_URI;
+  if (!uri) {
+    skip('download', 'download_create_task', 'set SMOKE_DOWNLOAD_URI to enable write smoke');
+    return;
+  }
+
+  const before = await listDownloadTasksQuietly(mcp);
+  const beforeIds = new Set(before.map((task) => task.id).filter(Boolean));
+  let createdTaskId;
+
+  await step('download', 'download_create_task', async () => {
+    const args = { uri, confirm: true };
+    if (env.SMOKE_DOWNLOAD_DESTINATION) args.destination = env.SMOKE_DOWNLOAD_DESTINATION;
+    const r = await mcp.callTool('download_create_task', args);
+    createdTaskId = r.task_id;
+    return r.task_id ?? 'created';
+  });
+
+  if (!createdTaskId) {
+    createdTaskId = await findNewDownloadTaskId(mcp, beforeIds, uri);
+  }
+
+  if (!createdTaskId) {
+    skip('download', 'download_pause_tasks', 'created task id unavailable; cannot safely mutate');
+    return;
+  }
+
+  let deleted = false;
+  cleanups.push(async () => {
+    if (deleted) return;
+    await mcp.callTool('download_delete_tasks', { task_ids: [createdTaskId], confirm: true });
+  });
+
+  await step('download', 'download_get_task', async () => {
+    const r = await mcp.callTool('download_get_task', {
+      task_ids: [createdTaskId],
+      additional: ['detail', 'transfer'],
+    });
+    return r.tasks?.[0]?.title ?? createdTaskId;
+  });
+  await step('download', 'download_pause_tasks', async () => {
+    await mcp.callTool('download_pause_tasks', { task_ids: [createdTaskId], confirm: true });
+    return createdTaskId;
+  });
+  await step('download', 'download_resume_tasks', async () => {
+    await mcp.callTool('download_resume_tasks', { task_ids: [createdTaskId], confirm: true });
+    return createdTaskId;
+  });
+  await step('download', 'download_delete_tasks', async () => {
+    await mcp.callTool('download_delete_tasks', { task_ids: [createdTaskId], confirm: true });
+    deleted = true;
+    return createdTaskId;
+  });
+}
+
+async function listDownloadTasksQuietly(mcp) {
+  try {
+    const r = await mcp.callTool('download_list_tasks', {
+      limit: 100,
+      additional: ['detail', 'transfer'],
+    });
+    return r.tasks ?? [];
+  } catch {
+    return [];
+  }
+}
+
+async function findNewDownloadTaskId(mcp, beforeIds, uri) {
+  for (let i = 0; i < 6; i += 1) {
+    await delay(3000);
+    const tasks = await listDownloadTasksQuietly(mcp);
+    const found = tasks.find((task) => {
+      if (!task.id || beforeIds.has(task.id)) return false;
+      const detailUri = task.additional?.detail?.uri;
+      const titleMatch =
+        env.SMOKE_DOWNLOAD_MATCH && String(task.title ?? '').includes(env.SMOKE_DOWNLOAD_MATCH);
+      return detailUri === uri || titleMatch;
+    });
+    if (found?.id) return found.id;
+  }
+  return undefined;
 }
 
 async function resolveMailplusSmokeRecipient() {

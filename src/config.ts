@@ -98,6 +98,7 @@ const AppConfigSchema = z.object({
   SYNO_ENABLE_SPREADSHEET: envBool(true),
   SYNO_ENABLE_MAILPLUS: envBool(true),
   SYNO_ENABLE_CALENDAR: envBool(true),
+  SYNO_ENABLE_DOWNLOAD_STATION: envBool(true),
 
   // MCP transport
   MCP_TRANSPORT: z
@@ -231,6 +232,7 @@ export function loadConfig(): AppConfig {
       spreadsheet: env.SYNO_ENABLE_SPREADSHEET,
       mailplus: env.SYNO_ENABLE_MAILPLUS,
       calendar: env.SYNO_ENABLE_CALENDAR,
+      downloadStation: env.SYNO_ENABLE_DOWNLOAD_STATION,
     },
     logLevel: env.LOG_LEVEL,
     ...(env.LOG_FILE ? { logFile: env.LOG_FILE } : {}),

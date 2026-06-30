@@ -8,11 +8,11 @@
 
 Visit [landing page](https://synology-mcp-server.smb-base.com/).
 
-> A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server that exposes **Synology Drive, Spreadsheet, MailPlus, and Calendar** as structured tools for AI agents (Claude Code, Claude Desktop, GoClaw, or any MCP-compatible client).
+> A self-hosted [Model Context Protocol](https://modelcontextprotocol.io) server that exposes **Synology Drive, Spreadsheet, MailPlus, Calendar, and Download Station** as structured tools for AI agents (Claude Code, Claude Desktop, GoClaw, or any MCP-compatible client).
 
 Wraps the official [Synology Office Suite REST API](https://office-suite-api.synology.com). LAN-only by default — no data leaves your network unless you explicitly opt in.
 
-> **v0.6.2 milestone** — All four modules are wired, with stdio plus Streamable HTTP transport for LAN/Docker deployments. Smoke tests against a real DSM 7.2.2 NAS are still recommended before declaring v1.0.0 production-ready. See [CHANGELOG](./CHANGELOG.md) for details.
+> **Pre-1.0 milestone** — Drive, Spreadsheet, MailPlus, Calendar, Download Station, and stdio plus Streamable HTTP transport are wired. Smoke tests against a real DSM 7.2.2 NAS are still recommended before declaring v1.0.0 production-ready. See [CHANGELOG](./CHANGELOG.md) for details.
 
 ---
 
@@ -41,9 +41,11 @@ Wraps the official [Synology Office Suite REST API](https://office-suite-api.syn
 | Module | Tools | Key Capabilities |
 |---|---|---|
 | **Drive** | 11 | List / search / get info / download / upload / create folder / move / delete / share / labels |
-| **Spreadsheet** | 13 | List / register-by-name / get info / read sheet / get styles / write cells / append rows / batch update / add-rename-delete sheet / create / export |
+| **Spreadsheet** | 15 | List / register-by-name / get info / read sheet / get styles / write cells / append rows / batch update / add-rename-delete sheet / create / export |
 | **MailPlus** | 6 | List folders / list messages / get message / send / move / mark read-unread |
 | **Calendar** | 7 | List calendars / list events / get event / create calendar / create event / update event / delete event |
+| **Download Station** | 6 | List tasks / get task / create URL or magnet task / pause / resume / delete |
+| **System** | 1 | Capability discovery for enabled modules, package/API availability, and tool counts |
 | **MCP Layer** | — | Resources (file tree, mail folders, calendar list), prompts, stdio + Streamable HTTP transports |
 | **Security** | — | TLS verify, path-guard, origin-guard, bearer-auth, log redaction, confirm-required writes |
 
@@ -70,6 +72,7 @@ Modules **not** included (no public API yet): Synology Docs, Synology Slides.
 | Synology Office | `3.7.0+` (for Spreadsheet) |
 | Synology MailPlus | `3.3.1+` (requires MailPlus Server package) |
 | Synology Calendar | `2.5.3+` |
+| Synology Download Station | Any recent DSM 7 package version |
 
 > Verify your DSM build: `Control Panel > Info Center > DSM Version`. Must be ≥ 72806.
 
@@ -205,7 +208,7 @@ All configuration is via environment variables, validated by [Zod](https://zod.d
 
 ## Tool Reference
 
-Full table of all 39 tools with input schemas: [`tool-reference.md`](./tool-reference.md).
+Full table of all 46 tools with input schemas: [`tool-reference.md`](./tool-reference.md).
 
 Quick summary by module:
 
@@ -213,6 +216,8 @@ Quick summary by module:
 - **Spreadsheet (13):** `spreadsheet_list`, `spreadsheet_register`, `spreadsheet_get_info`, `spreadsheet_read_sheet`, `spreadsheet_get_styles`, `spreadsheet_write_cells`, `spreadsheet_append_rows`, `spreadsheet_batch_update`, `spreadsheet_add_sheet`, `spreadsheet_rename_sheet`, `spreadsheet_delete_sheet`, `spreadsheet_create`, `spreadsheet_export`
 - **MailPlus (6):** `mailplus_list_folders`, `mailplus_list_messages`, `mailplus_get_message`, `mailplus_send_message`, `mailplus_move_messages`, `mailplus_mark_messages`
 - **Calendar (7):** `calendar_list_calendars`, `calendar_list_events`, `calendar_get_event`, `calendar_create_calendar`, `calendar_create_event`, `calendar_update_event`, `calendar_delete_event`
+- **Download Station (6):** `download_list_tasks`, `download_get_task`, `download_create_task`, `download_pause_tasks`, `download_resume_tasks`, `download_delete_tasks`
+- **System (1):** `synology_list_capabilities`
 
 ---
 
@@ -376,7 +381,7 @@ See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full contributor workflow.
 
 | Layer | Tooling | Notes |
 |---|---|---|
-| Unit | [Vitest](https://vitest.dev) | All modules in `tests/` — 359 tests |
+| Unit | [Vitest](https://vitest.dev) | All modules in `tests/` — 377 tests |
 | HTTP mocking | [MSW](https://mswjs.io) | No real NAS required for unit tests |
 | Smoke | `scripts/smoke-mcp.mjs` | Hits a real NAS via MCP stdio — disabled in CI |
 
@@ -387,7 +392,7 @@ pnpm smoke:write        # temporary create/update/move/delete/send where configu
 pnpm smoke:spreadsheet  # direct Spreadsheet API container create/write/delete probe
 ```
 
-Smoke resources are named `synology-mcp-smoke-<timestamp>` and cleaned up after the run; Drive cleanup moves temporary folders to Drive trash, and Drive label smoke creates/deletes a temporary label when no label exists. MailPlus send smoke uses `SMOKE_MAILPLUS_RECIPIENT`, `SYNO_USERNAME` when it is an email address, or the default MailPlus SMTP sender for a self-addressed test. Spreadsheet deep read/write smoke requires the Synology Spreadsheet API container to authenticate a DSM account; when the main DSM account uses OTP, set `SYNO_SS_USERNAME` / `SYNO_SS_PASSWORD` to a no-2FA service account or Spreadsheet API calls beyond `spreadsheet_list` are skipped.
+Smoke resources are named `synology-mcp-smoke-<timestamp>` and cleaned up after the run; Drive cleanup moves temporary folders to Drive trash, and Drive label smoke creates/deletes a temporary label when no label exists. MailPlus send smoke uses `SMOKE_MAILPLUS_RECIPIENT`, `SYNO_USERNAME` when it is an email address, or the default MailPlus SMTP sender for a self-addressed test. Download Station write smoke is skipped unless `SMOKE_DOWNLOAD_URI` is set, then creates a temporary task and deletes it after pause/resume checks. Spreadsheet deep read/write smoke requires the Synology Spreadsheet API container to authenticate a DSM account; when the main DSM account uses OTP, set `SYNO_SS_USERNAME` / `SYNO_SS_PASSWORD` to a no-2FA service account or Spreadsheet API calls beyond `spreadsheet_list` are skipped.
 
 Run real NAS smoke commands sequentially. DSM OTP logins can reject concurrent sessions during the same TOTP window.
 
@@ -397,7 +402,7 @@ Run real NAS smoke commands sequentially. DSM OTP logins can reject concurrent s
 
 | Document | Purpose |
 |---|---|
-| [tool-reference.md](./tool-reference.md) | All 39 tools: name, module, confirm-required, summary |
+| [tool-reference.md](./tool-reference.md) | All 46 tools: name, module, confirm-required, summary |
 | [usage-guide.md](./usage-guide.md) | Sample prompts for invoking each tool from an MCP-aware agent |
 | [deployment-guide.md](./deployment-guide.md) | Docker, systemd unit, Synology scheduled task |
 | [integration-guide.md](./integration-guide.md) | Client wiring (Claude, Cursor, Codex, LangChain, …) |
@@ -422,4 +427,4 @@ This project follows [Conventional Commits](https://www.conventionalcommits.org)
 
 [MIT](./LICENSE) © 2026 Tien Chu — `<chutien@gmail.com>`
 
-> Synology, Synology Drive, Synology Office, MailPlus, and Synology Calendar are trademarks of Synology Inc. This project is an independent open-source client and is not affiliated with or endorsed by Synology Inc.
+> Synology, Synology Drive, Synology Office, MailPlus, Synology Calendar, and Download Station are trademarks of Synology Inc. This project is an independent open-source client and is not affiliated with or endorsed by Synology Inc.

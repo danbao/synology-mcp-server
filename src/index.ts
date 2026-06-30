@@ -11,6 +11,7 @@ import { DriveClient } from './clients/drive-client.js';
 import { SpreadsheetClient } from './clients/spreadsheet-client.js';
 import { MailPlusClient } from './clients/mailplus-client.js';
 import { CalendarClient } from './clients/calendar-client.js';
+import { DownloadStationClient } from './clients/download-station-client.js';
 import { SpreadsheetIdCache } from './cache/spreadsheet-id-cache.js';
 import { aggregateTools } from './tools/index.js';
 import { createServer } from './server/create-server.js';
@@ -99,6 +100,7 @@ async function main(): Promise<void> {
   const spreadsheetClient = new SpreadsheetClient(config.synology, spreadsheetAuthManager);
   const mailplusClient = new MailPlusClient(config.synology, authManager);
   const calendarClient = new CalendarClient(config.synology, authManager);
+  const downloadStationClient = new DownloadStationClient(config.synology, authManager);
   const spreadsheetIdCache = new SpreadsheetIdCache();
 
   const ctx: ToolContext = {
@@ -106,7 +108,9 @@ async function main(): Promise<void> {
     spreadsheetClient,
     mailplusClient,
     calendarClient,
+    downloadStationClient,
     spreadsheetIdCache,
+    features: config.features,
   };
 
   const tools = aggregateTools(config.features);

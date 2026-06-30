@@ -6,7 +6,7 @@ How to wire **synology-office-mcp** into MCP-aware AI agents and clients. This g
 - **Streamable HTTP transport** — the server runs as a long-lived HTTP daemon at `http://<host>:3100/mcp`, optionally fronted by HTTPS reverse proxy and protected by `MCP_AUTH_TOKEN`.
 
 > [!NOTE]
-> Pre-1.0 status (`v0.6.x`). All 39 tools across Drive / Spreadsheet / MailPlus / Calendar are wired and unit-tested; smoke validation against a real DSM 7.2.2 NAS is recommended before `1.0.0`.
+> Pre-1.0 status. All 46 tools across Drive / Spreadsheet / MailPlus / Calendar / Download Station / capability discovery are wired and unit-tested; smoke validation against a real DSM 7.2.2 NAS is recommended before `1.0.0`.
 
 ---
 

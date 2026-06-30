@@ -62,10 +62,28 @@ This matrix is used by smoke tests and mock assertions to prevent API drift.
 | `mailplus_mark_messages` | `Message.set_read` or `Message.set_star` | 10 | POST | form body | yes |
 | `mailplus_move_messages` | `Message.set_mailbox` | 10 | POST | form body | yes |
 
+## Download Station
+
+| MCP tool | Synology API | Version | HTTP | Request shape | Writes |
+| --- | --- | ---: | --- | --- | --- |
+| `download_list_tasks` | `SYNO.DownloadStation.Task.list` | 1 | GET | query (`offset`, `limit`, `additional`) | no |
+| `download_get_task` | `SYNO.DownloadStation.Task.getinfo` | 1 | GET | query (`id`, `additional`) | no |
+| `download_create_task` | `SYNO.DownloadStation.Task.create` | 1 | POST | query api + form body (`uri`, optional `destination`) | yes |
+| `download_pause_tasks` | `SYNO.DownloadStation.Task.pause` | 1 | POST | query api + form body (`id`) | yes |
+| `download_resume_tasks` | `SYNO.DownloadStation.Task.resume` | 1 | POST | query api + form body (`id`) | yes |
+| `download_delete_tasks` | `SYNO.DownloadStation.Task.delete` | 1 | POST | query api + form body (`id`, `force_complete=false`) | yes |
+
+## System
+
+| MCP tool | Synology API | Version | HTTP | Request shape | Writes |
+| --- | --- | ---: | --- | --- | --- |
+| `synology_list_capabilities` | `SYNO.API.Info.query` + module probes | 1 | GET | availability probes per enabled module | no |
+
 ## Real Smoke Defaults
 
 - `pnpm smoke:readonly` validates only non-destructive calls.
 - `pnpm smoke:write` creates temporary resources named `synology-mcp-smoke-<timestamp>` and moves Drive cleanup resources to Drive trash.
 - Drive label smoke uses an existing label or creates and deletes a temporary label unless `SMOKE_DRIVE_AUTOCREATE_LABEL=false`.
 - MailPlus send smoke uses `SMOKE_MAILPLUS_RECIPIENT`, `SYNO_USERNAME` when it is an email address, or the default MailPlus SMTP sender.
+- Download Station write smoke is skipped unless `SMOKE_DOWNLOAD_URI` is set; when enabled it creates a temporary task, verifies get/pause/resume/delete, and keeps cleanup fallback for the created task id.
 - Spreadsheet read-only smoke uses `SMOKE_SPREADSHEET_ID` when set. It only auto-picks the first `spreadsheet_list` result when Spreadsheet API and Drive use the same DSM account; with a separate `SYNO_SS_USERNAME`, set an ID that service account can access. Deep read/write smoke is skipped when only an OTP-protected DSM account is available because `/spreadsheets/authorize` does not accept OTP.

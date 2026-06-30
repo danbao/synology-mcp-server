@@ -77,6 +77,8 @@ export interface FeatureFlags {
   mailplus: boolean;
   /** Enable Synology Calendar tools */
   calendar: boolean;
+  /** Enable Synology Download Station tools */
+  downloadStation: boolean;
 }
 
 /** Root application configuration assembled from environment */
