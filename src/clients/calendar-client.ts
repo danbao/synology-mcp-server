@@ -268,8 +268,32 @@ export interface CreateCalendarOpts {
  * Datetime values are in Unix seconds on the wire.
  */
 export class CalendarClient extends BaseClient {
+  private _available: boolean | undefined;
+
   constructor(config: SynologyConfig, authManager: AuthManager) {
     super(config, authManager);
+  }
+
+  /** Check whether Synology Calendar API is installed and reachable. */
+  async isAvailable(): Promise<boolean> {
+    if (this._available !== undefined) return this._available;
+
+    try {
+      const data = await this.request<Record<string, unknown>>({
+        endpoint: ENTRY,
+        params: {
+          api: 'SYNO.API.Info',
+          version: 1,
+          method: 'query',
+          query: 'SYNO.Cal.Cal,SYNO.Cal.Event',
+        },
+      });
+      this._available = Object.hasOwn(data, 'SYNO.Cal.Cal') && Object.hasOwn(data, 'SYNO.Cal.Event');
+    } catch {
+      this._available = false;
+    }
+
+    return this._available;
   }
 
   /**

@@ -10,7 +10,7 @@ This guide covers four deployment topologies for **synology-office-mcp**. Pick t
 | [4](#4-on-nas--without-docker) | NAS (Task Scheduler / SSH) | ❌ No | Minimal footprint, direct loopback to DSM APIs |
 
 > [!NOTE]
-> Pre-1.0 status. All four modules (Drive, Spreadsheet, MailPlus, Calendar) and both transports (stdio + Streamable HTTP) are wired. Smoke validation against a real DSM NAS is recommended before production use.
+> Pre-1.0 status. Drive, Spreadsheet, MailPlus, Calendar, Download Station, and both transports (stdio + Streamable HTTP) are wired. Smoke validation against a real DSM NAS is recommended before production use.
 
 ---
 
@@ -18,7 +18,7 @@ This guide covers four deployment topologies for **synology-office-mcp**. Pick t
 
 - A Synology NAS reachable from where the MCP server will run, with:
   - DSM `7.2.2 nano3+`
-  - Synology Drive `3.5.2+`, Office `3.6.0+`, MailPlus `3.3.1+`, Calendar `2.5.3+` (only the modules you enable)
+  - Synology Drive `3.5.2+`, Office `3.6.0+`, MailPlus `3.3.1+`, Calendar `2.5.3+`, Download Station (only the modules you enable)
   - A DSM user account with appropriate permissions on the modules you intend to expose
 - A `.env` file based on [`.env.example`](./.env.example) — at minimum:
 

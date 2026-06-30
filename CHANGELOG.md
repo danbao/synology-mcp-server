@@ -8,6 +8,11 @@ The format follows [Keep a Changelog 1.1.0](https://keepachangelog.com/en/1.1.0/
 
 ## [Unreleased]
 
+### Added
+- Added Download Station task management tools: list/get/create/pause/resume/delete.
+- Added `synology_list_capabilities` to report enabled MCP modules, package/API availability, and tool counts.
+- Added `SYNO_ENABLE_DOWNLOAD_STATION` feature flag and Download Station smoke coverage.
+
 ---
 
 ## [0.6.2] - 2026-06-29

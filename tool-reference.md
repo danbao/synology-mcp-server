@@ -1,6 +1,6 @@
 # Tool Reference
 
-All 39 MCP tools exposed by synology-office-mcp.
+All 46 MCP tools exposed by synology-office-mcp.
 
 `confirm` column: tools marked **yes** require `"confirm": true` in the input or they return an error without performing the action.
 
@@ -72,6 +72,27 @@ Most spreadsheet tools accept either `file_id` or a previously registered `name`
 | `calendar_create_event` | **yes** | Create a calendar event; supports recurrence, all-day, and reminders |
 | `calendar_update_event` | **yes** | Update an existing event's fields (title, time, description, etc.) |
 | `calendar_delete_event` | **yes** | Delete an event by calendar ID and event ID |
+
+---
+
+## Download Station (6 tools)
+
+| Tool | Confirm | Summary |
+|---|---|---|
+| `download_list_tasks` | no | List Download Station tasks with pagination and optional status filtering |
+| `download_get_task` | no | Get task details by one or more Download Station task IDs |
+| `download_create_task` | **yes** | Create a URL or magnet download task |
+| `download_pause_tasks` | **yes** | Pause one or more download tasks |
+| `download_resume_tasks` | **yes** | Resume one or more paused download tasks |
+| `download_delete_tasks` | **yes** | Delete one or more download tasks without requesting downloaded file deletion |
+
+---
+
+## System (1 tool)
+
+| Tool | Confirm | Summary |
+|---|---|---|
+| `synology_list_capabilities` | no | Report enabled MCP modules, package/API availability, and tool counts |
 
 ---
 

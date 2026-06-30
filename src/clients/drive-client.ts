@@ -53,6 +53,7 @@ export type {
 export class DriveClient extends BaseClient {
   /** Passed to file-transfer module for binary HTTP calls that bypass request<T>(). */
   private readonly transferDeps: transfer.TransferDeps;
+  private _available: boolean | undefined;
 
   constructor(config: SynologyConfig, authManager: AuthManager) {
     super(config, authManager);
@@ -65,6 +66,28 @@ export class DriveClient extends BaseClient {
       dispatcher,
       getToken: () => authManager.getToken(),
     };
+  }
+
+  /** Check whether Synology Drive API is installed and reachable. */
+  async isAvailable(): Promise<boolean> {
+    if (this._available !== undefined) return this._available;
+
+    try {
+      const data = await this.request<Record<string, unknown>>({
+        endpoint: '/webapi/entry.cgi',
+        params: {
+          api: 'SYNO.API.Info',
+          version: 1,
+          method: 'query',
+          query: 'SYNO.SynologyDrive.Files',
+        },
+      });
+      this._available = Object.hasOwn(data, 'SYNO.SynologyDrive.Files');
+    } catch {
+      this._available = false;
+    }
+
+    return this._available;
   }
 
   // ---------------------------------------------------------------------------

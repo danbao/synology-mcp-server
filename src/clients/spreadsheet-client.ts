@@ -183,6 +183,16 @@ export class SpreadsheetClient {
     }
   }
 
+  /** Check whether the Spreadsheet API container is reachable and can authorize. */
+  async isAvailable(): Promise<boolean> {
+    try {
+      await this.authManager.getToken();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** GET /spreadsheets/{id} */
   async getInfo(file_id: string): Promise<SynoSpreadsheetInfo> {
     const response = await this.fetchJson<SpreadsheetData>('GET', `/spreadsheets/${encodeURIComponent(file_id)}`);

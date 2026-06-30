@@ -23,6 +23,7 @@ const ALL_FEATURES: FeatureFlags = {
   spreadsheet: true,
   mailplus: true,
   calendar: true,
+  downloadStation: true,
 };
 
 const DRIVE_ONLY: FeatureFlags = {
@@ -30,6 +31,7 @@ const DRIVE_ONLY: FeatureFlags = {
   spreadsheet: false,
   mailplus: false,
   calendar: false,
+  downloadStation: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -41,27 +43,31 @@ describe('createServer — ListTools', () => {
     const tools = aggregateTools(ALL_FEATURES);
     expect(tools.length).toBeGreaterThan(0);
 
-    // 11 drive + 15 spreadsheet + 6 mailplus + 7 calendar = 39
-    expect(tools.length).toBe(39);
+    // 1 capability + 11 drive + 15 spreadsheet + 6 mailplus + 7 calendar + 6 download = 46
+    expect(tools.length).toBe(46);
   });
 
-  it('includes only drive tools when only drive enabled', () => {
+  it('includes capability and drive tools when only drive enabled', () => {
     const tools = aggregateTools(DRIVE_ONLY);
     const names = tools.map((t) => t.name);
-    expect(names.every((n) => n.startsWith('drive_'))).toBe(true);
+    expect(names.every((n) => n.startsWith('drive_') || n === 'synology_list_capabilities')).toBe(
+      true,
+    );
     expect(names.some((n) => n.startsWith('spreadsheet_'))).toBe(false);
     expect(names.some((n) => n.startsWith('mailplus_'))).toBe(false);
     expect(names.some((n) => n.startsWith('calendar_'))).toBe(false);
+    expect(names.some((n) => n.startsWith('download_'))).toBe(false);
   });
 
-  it('returns empty array when all features disabled', () => {
+  it('returns only capability tool when all features disabled', () => {
     const tools = aggregateTools({
       drive: false,
       spreadsheet: false,
       mailplus: false,
       calendar: false,
+      downloadStation: false,
     });
-    expect(tools).toHaveLength(0);
+    expect(tools.map((tool) => tool.name)).toEqual(['synology_list_capabilities']);
   });
 });
 

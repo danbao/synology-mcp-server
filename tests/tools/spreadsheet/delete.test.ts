@@ -12,6 +12,7 @@ import {
   createTestDriveClient,
   createTestMailPlusClient,
   createTestCalendarClient,
+  createTestDownloadStationClient,
 } from '../../mocks/test-client-factory.js';
 import { spreadsheetDeleteFileTool } from '../../../src/tools/spreadsheet/delete.js';
 import type { ToolContext } from '../../../src/tools/types.js';
@@ -41,7 +42,15 @@ describe('spreadsheet_delete_file', () => {
       spreadsheetClient: createTestSpreadsheetClient(),
       mailplusClient: createTestMailPlusClient(),
       calendarClient: createTestCalendarClient(),
+      downloadStationClient: createTestDownloadStationClient(),
       spreadsheetIdCache: cache,
+      features: {
+        drive: true,
+        spreadsheet: true,
+        mailplus: true,
+        calendar: true,
+        downloadStation: true,
+      },
     };
 
     const result = (await spreadsheetDeleteFileTool.handler(

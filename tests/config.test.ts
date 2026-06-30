@@ -63,6 +63,7 @@ describe('loadConfig', () => {
     'SYNO_ENABLE_SPREADSHEET',
     'SYNO_ENABLE_MAILPLUS',
     'SYNO_ENABLE_CALENDAR',
+    'SYNO_ENABLE_DOWNLOAD_STATION',
     'MCP_TRANSPORT',
     'MCP_HTTP_PORT',
     'MCP_HTTP_HOST',
@@ -95,6 +96,7 @@ describe('loadConfig', () => {
       expect(cfg.synology.username).toBe('admin');
       expect(cfg.mcp.transport).toBe('stdio');
       expect(cfg.features.drive).toBe(true);
+      expect(cfg.features.downloadStation).toBe(true);
       expect(cfg.logLevel).toBe('info');
     } finally {
       restore();

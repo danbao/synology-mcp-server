@@ -8,6 +8,8 @@
 import { http, HttpResponse } from 'msw';
 
 const ENTRY_CGI = 'http://nas.local:5000/webapi/entry.cgi';
+const DOWNLOAD_INFO_CGI = 'http://nas.local:5000/webapi/DownloadStation/info.cgi';
+const DOWNLOAD_TASK_CGI = 'http://nas.local:5000/webapi/DownloadStation/task.cgi';
 
 /** Minimal Synology success envelope */
 function ok<T>(data: T) {
@@ -178,10 +180,16 @@ function parseJsonParam<T>(params: RequestParams, name: string, fallback: T): T 
 
 /** Set to false in tests to simulate MailPlus Server not installed. */
 export let mailplusAvailable = true;
+export let downloadStationAvailable = true;
 
 /** Toggle MailPlus availability for a test. Restore via afterEach. */
 export function setMailplusAvailable(value: boolean): void {
   mailplusAvailable = value;
+}
+
+/** Toggle Download Station availability for a test. Restore via afterEach. */
+export function setDownloadStationAvailable(value: boolean): void {
+  downloadStationAvailable = value;
 }
 
 // ---------------------------------------------------------------------------
@@ -368,6 +376,47 @@ const EVENT_FIXTURE = {
 };
 
 // ---------------------------------------------------------------------------
+// Download Station fixture data
+// ---------------------------------------------------------------------------
+
+const DOWNLOAD_TASK_FIXTURE = {
+  id: 'dbid_001',
+  type: 'http',
+  username: 'admin',
+  title: 'ubuntu.iso',
+  size: 1024,
+  status: 'downloading',
+  status_extra: {
+    error_detail: '',
+  },
+  additional: {
+    detail: {
+      destination: 'downloads',
+      uri: 'https://example.com/ubuntu.iso',
+      create_time: 1700000000,
+      started_time: 1700000100,
+      total_peers: 0,
+      connected_seeders: 0,
+      connected_leechers: 0,
+    },
+    transfer: {
+      size_downloaded: 256,
+      size_uploaded: 0,
+      speed_download: 1024,
+      speed_upload: 0,
+    },
+    file: [
+      {
+        filename: 'ubuntu.iso',
+        size: 1024,
+        size_downloaded: 256,
+        priority: 'normal',
+      },
+    ],
+  },
+};
+
+// ---------------------------------------------------------------------------
 // Consolidated request handlers
 // ---------------------------------------------------------------------------
 
@@ -457,18 +506,65 @@ function handleGet(request: Request): Response {
     });
   }
 
-  // --- SYNO.API.Info (MailPlus availability probe) ---
+  // --- SYNO.API.Info (module availability probes) ---
   if (api === 'SYNO.API.Info' && method === 'query') {
-    if (!mailplusAvailable) {
-      return ok({});
-    }
-    return ok({
+    const allApis: Record<string, { path: string; minVersion: number; maxVersion: number }> = {
+      'SYNO.SynologyDrive.Files': { path: 'entry.cgi', minVersion: 1, maxVersion: 10 },
+      'SYNO.SynologyDrive.Labels': { path: 'entry.cgi', minVersion: 1, maxVersion: 3 },
+      'SYNO.Cal.Cal': { path: 'entry.cgi', minVersion: 1, maxVersion: 5 },
+      'SYNO.Cal.Event': { path: 'entry.cgi', minVersion: 1, maxVersion: 6 },
+    };
+    if (mailplusAvailable) {
+      Object.assign(allApis, {
       'SYNO.MailClient.Mailbox': { path: 'entry.cgi', minVersion: 1, maxVersion: 1 },
       'SYNO.MailClient.Message': { path: 'entry.cgi', minVersion: 1, maxVersion: 10 },
       'SYNO.MailClient.Thread': { path: 'entry.cgi', minVersion: 1, maxVersion: 10 },
       'SYNO.MailClient.Draft': { path: 'entry.cgi', minVersion: 1, maxVersion: 6 },
       'SYNO.MailClient.Attachment': { path: 'entry.cgi', minVersion: 1, maxVersion: 8 },
-    });
+      });
+    }
+    if (downloadStationAvailable) {
+      Object.assign(allApis, {
+        'SYNO.DownloadStation.Info': {
+          path: 'DownloadStation/info.cgi',
+          minVersion: 1,
+          maxVersion: 1,
+        },
+        'SYNO.DownloadStation.Task': {
+          path: 'DownloadStation/task.cgi',
+          minVersion: 1,
+          maxVersion: 1,
+        },
+      });
+    }
+
+    const query = url.searchParams.get('query');
+    if (query === null || query === 'all') return ok(allApis);
+    const requested = query.split(',').map((item) => item.trim());
+    const filtered: typeof allApis = {};
+    for (const name of requested) {
+      if (Object.hasOwn(allApis, name)) filtered[name] = allApis[name]!;
+    }
+    return ok(filtered);
+  }
+
+  // --- SYNO.DownloadStation.Info ---
+  if (api === 'SYNO.DownloadStation.Info' && method === 'getinfo') {
+    if (!downloadStationAvailable) return synoError(102);
+    return ok({ version: 1, version_string: '3.9.7', is_manager: true });
+  }
+
+  // --- SYNO.DownloadStation.Task ---
+  if (api === 'SYNO.DownloadStation.Task') {
+    if (!downloadStationAvailable) return synoError(102);
+    if (method === 'list') {
+      return ok({ tasks: [DOWNLOAD_TASK_FIXTURE], total: 1, offset: 0 });
+    }
+    if (method === 'getinfo') {
+      const ids = (url.searchParams.get('id') ?? '').split(',').filter(Boolean);
+      if (ids.includes('not-found')) return synoError(102);
+      return ok({ tasks: [DOWNLOAD_TASK_FIXTURE], total: 1, offset: 0 });
+    }
   }
 
   // --- SYNO.MailClient.Mailbox ---
@@ -703,6 +799,42 @@ async function handlePost(request: Request): Promise<Response> {
         },
       ],
     });
+  }
+
+  // --- SYNO.DownloadStation.Task mutations ---
+  if (api === 'SYNO.DownloadStation.Task') {
+    if (!downloadStationAvailable) return synoError(102);
+    if (method === 'create') {
+      if (
+        params.get('version') !== '1' ||
+        params.source !== 'form' ||
+        params.get('uri') !== 'https://example.com/ubuntu.iso'
+      ) {
+        return synoError(101);
+      }
+      return ok({ task_id: 'dbid_002' });
+    }
+    if (method === 'pause' || method === 'resume') {
+      if (
+        params.get('version') !== '1' ||
+        params.source !== 'form' ||
+        params.get('id') !== 'dbid_001'
+      ) {
+        return synoError(101);
+      }
+      return HttpResponse.json({ success: true });
+    }
+    if (method === 'delete') {
+      if (
+        params.get('version') !== '1' ||
+        params.source !== 'form' ||
+        params.get('id') !== 'dbid_001' ||
+        params.get('force_complete') !== 'false'
+      ) {
+        return synoError(101);
+      }
+      return HttpResponse.json({ success: true });
+    }
   }
 
   // --- SYNO.SynologyDrive.Sharing ---
@@ -1226,6 +1358,9 @@ const spreadsheetHandlers = [
 export const driveHandlers = [
   http.get(ENTRY_CGI, ({ request }) => handleGet(request)),
   http.post(ENTRY_CGI, async ({ request }) => await handlePost(request)),
+  http.get(DOWNLOAD_INFO_CGI, ({ request }) => handleGet(request)),
+  http.get(DOWNLOAD_TASK_CGI, ({ request }) => handleGet(request)),
+  http.post(DOWNLOAD_TASK_CGI, async ({ request }) => await handlePost(request)),
 ];
 
 /** Auth handlers used to bootstrap test clients that need a valid sid. */

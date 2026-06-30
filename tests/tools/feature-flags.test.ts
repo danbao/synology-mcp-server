@@ -12,6 +12,7 @@ const ALL_ON: FeatureFlags = {
   spreadsheet: true,
   mailplus: true,
   calendar: true,
+  downloadStation: true,
 };
 
 const ALL_OFF: FeatureFlags = {
@@ -19,6 +20,7 @@ const ALL_OFF: FeatureFlags = {
   spreadsheet: false,
   mailplus: false,
   calendar: false,
+  downloadStation: false,
 };
 
 describe('aggregateTools feature flags', () => {
@@ -27,9 +29,9 @@ describe('aggregateTools feature flags', () => {
     expect(tools.length).toBeGreaterThan(0);
   });
 
-  it('returns empty array when every feature is disabled', () => {
+  it('keeps only capability tool when every feature is disabled', () => {
     const tools = aggregateTools(ALL_OFF);
-    expect(tools).toHaveLength(0);
+    expect(tools.map((tool) => tool.name)).toEqual(['synology_list_capabilities']);
   });
 
   it('excludes all drive tools when drive=false', () => {
@@ -62,12 +64,22 @@ describe('aggregateTools feature flags', () => {
     expect(calTools).toHaveLength(0);
   });
 
+  it('excludes all Download Station tools when downloadStation=false', () => {
+    const tools = aggregateTools({ ...ALL_ON, downloadStation: false });
+    const downloadTools = tools.filter((t) => t.name.startsWith('download_'));
+    expect(downloadTools).toHaveLength(0);
+  });
+
   it('includes only the enabled module when one is on and rest are off', () => {
     const tools = aggregateTools({ ...ALL_OFF, spreadsheet: true });
     expect(tools.length).toBeGreaterThan(0);
-    // Every returned tool must belong to spreadsheet
-    for (const tool of tools) {
-      expect(tool.name).toMatch(/^spreadsheet_/);
-    }
+    expect(tools.map((tool) => tool.name).sort()).toEqual(
+      expect.arrayContaining(['synology_list_capabilities']),
+    );
+    expect(
+      tools
+        .filter((tool) => tool.name !== 'synology_list_capabilities')
+        .every((tool) => tool.name.startsWith('spreadsheet_')),
+    ).toBe(true);
   });
 });

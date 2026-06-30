@@ -161,6 +161,36 @@ Sample natural-language prompts for invoking each **synology-office-mcp** tool f
 
 ---
 
+## Download Station
+
+### `download_list_tasks`
+- "List my current Download Station tasks and show download speeds."
+
+### `download_get_task`
+- "Get details for Download Station task id `dbid_123`, including files and transfer status."
+
+### `download_create_task` *(confirm)*
+- "Add this magnet link to Download Station in destination `downloads` — yes, confirm."
+- "Create a Download Station task for `https://example.com/file.iso` — confirm."
+
+### `download_pause_tasks` *(confirm)*
+- "Pause Download Station tasks `[dbid_123, dbid_456]` — confirm."
+
+### `download_resume_tasks` *(confirm)*
+- "Resume Download Station task `dbid_123` — confirm."
+
+### `download_delete_tasks` *(confirm)*
+- "Delete Download Station task `dbid_123` but do not delete downloaded files — confirm."
+
+---
+
+## System
+
+### `synology_list_capabilities`
+- "Check which Synology MCP modules are enabled and available on this NAS."
+
+---
+
 ## Composite workflows
 
 Combine tools in a single prompt — the agent will chain them automatically.

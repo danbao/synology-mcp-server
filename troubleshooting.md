@@ -35,6 +35,20 @@ When a Synology API call fails, the error includes a numeric `synoCode`. Common 
 
 ---
 
+## Download Station Not Detected
+
+**Symptom:** `download_list_tasks` returns `MODULE_UNAVAILABLE` or Synology code `102`.
+
+**Cause:** Download Station is not installed, disabled, or unavailable to the DSM user.
+
+**Fix:**
+1. In DSM, go to `Package Center`
+2. Install and open **Download Station**
+3. Confirm the MCP DSM user has permission to use Download Station
+4. Retry `synology_list_capabilities` and then `download_list_tasks`
+
+---
+
 ## DSM Version Check
 
 The server requires DSM 7.2.2 build **72806** or later.
@@ -155,6 +169,7 @@ Verify required packages are installed and running in DSM `Package Center`:
 | Spreadsheet tools | Synology Office ≥ 3.6.0 |
 | MailPlus tools | MailPlus Server (any recent version) |
 | Calendar tools | Synology Calendar ≥ 2.5.3 |
+| Download Station tools | Download Station (any recent DSM 7 package version) |
 
 ---
 

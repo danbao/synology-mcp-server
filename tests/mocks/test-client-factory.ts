@@ -10,6 +10,7 @@ import { DriveClient } from '../../src/clients/drive-client.js';
 import { SpreadsheetClient } from '../../src/clients/spreadsheet-client.js';
 import { MailPlusClient } from '../../src/clients/mailplus-client.js';
 import { CalendarClient } from '../../src/clients/calendar-client.js';
+import { DownloadStationClient } from '../../src/clients/download-station-client.js';
 import { AuthManager } from '../../src/auth/auth-manager.js';
 import { SpreadsheetAuthManager } from '../../src/auth/spreadsheet-auth-manager.js';
 import { SpreadsheetIdCache } from '../../src/cache/spreadsheet-id-cache.js';
@@ -58,6 +59,12 @@ export function createTestCalendarClient(): CalendarClient {
   return new CalendarClient(TEST_CONFIG, authManager);
 }
 
+/** Create a DownloadStationClient backed by a real AuthManager (auth is mocked via MSW). */
+export function createTestDownloadStationClient(): DownloadStationClient {
+  const authManager = new AuthManager(TEST_CONFIG);
+  return new DownloadStationClient(TEST_CONFIG, authManager);
+}
+
 /** Create a SpreadsheetIdCache backed by a unique tmpfile so tests don't share state. */
 export function createTestSpreadsheetIdCache(): SpreadsheetIdCache {
   const tmpPath = path.join(os.tmpdir(), `syno-mcp-cache-${randomUUID()}.json`);
@@ -71,6 +78,14 @@ export function createTestContext(): ToolContext {
     spreadsheetClient: createTestSpreadsheetClient(),
     mailplusClient: createTestMailPlusClient(),
     calendarClient: createTestCalendarClient(),
+    downloadStationClient: createTestDownloadStationClient(),
     spreadsheetIdCache: createTestSpreadsheetIdCache(),
+    features: {
+      drive: true,
+      spreadsheet: true,
+      mailplus: true,
+      calendar: true,
+      downloadStation: true,
+    },
   };
 }

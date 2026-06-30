@@ -9,7 +9,9 @@ import type { DriveClient } from '../clients/drive-client.js';
 import type { SpreadsheetClient } from '../clients/spreadsheet-client.js';
 import type { MailPlusClient } from '../clients/mailplus-client.js';
 import type { CalendarClient } from '../clients/calendar-client.js';
+import type { DownloadStationClient } from '../clients/download-station-client.js';
 import type { SpreadsheetIdCache } from '../cache/spreadsheet-id-cache.js';
+import type { FeatureFlags } from '../types/index.js';
 
 /** Runtime context injected into every tool handler call. */
 export interface ToolContext {
@@ -21,8 +23,12 @@ export interface ToolContext {
   mailplusClient: MailPlusClient;
   /** Authenticated Calendar client; available when calendar feature is enabled. */
   calendarClient: CalendarClient;
+  /** Authenticated Download Station client; availability checked via isAvailable(). */
+  downloadStationClient: DownloadStationClient;
   /** Local cache mapping spreadsheet name → alphanumeric Spreadsheet ID. */
   spreadsheetIdCache: SpreadsheetIdCache;
+  /** Runtime feature flags used by capability reporting. */
+  features: FeatureFlags;
 }
 
 /** Union of all possible non-success responses a handler may return. */
@@ -51,14 +57,13 @@ export interface ToolDefinition<S extends ZodTypeAny = ZodTypeAny> {
 }
 
 /**
- * Build a MODULE_UNAVAILABLE error response for tools that require MailPlus Server.
- * Return this when `ctx.mailplusClient.isAvailable()` resolves false.
+ * Build a MODULE_UNAVAILABLE error response for tools that require an optional package.
  */
-export function moduleUnavailableResponse(): McpErrorResponse {
+export function moduleUnavailableResponse(moduleName = 'MailPlus Server'): McpErrorResponse {
   return {
     error: true,
     code: 'MODULE_UNAVAILABLE',
-    message: 'MailPlus Server is not installed on this NAS.',
+    message: `${moduleName} is not installed on this NAS.`,
     retryable: false,
   };
 }
